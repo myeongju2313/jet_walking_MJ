@@ -20,21 +20,21 @@ const std::string FILE_NAMES[FILE_CNT] =
 {
   ///change this directory when you use this code on the other computer///
 
-  "/home/jhk/data/walking/0_desired_zmp_.txt",
-  "/home/jhk/data/walking/1_desired_com_.txt",
-  "/home/jhk/data/walking/2_desired_q_.txt",
-  "/home/jhk/data/walking/3_real_q_.txt",
-  "/home/jhk/data/walking/4_desired_swingfoot_.txt",
-  "/home/jhk/data/walking/5_desired_pelvis_trajectory_.txt",
-  "/home/jhk/data/walking/6_current_com_pelvis_trajectory_.txt",
-  "/home/jhk/data/walking/7_current_foot_trajectory_.txt",
-  "/home/jhk/data/walking/8_QPestimation_variables_.txt",
-  "/home/jhk/data/walking/9_ft_sensor_.txt",
-  "/home/jhk/data/walking/10_ext_encoder_.txt",
-  "/home/jhk/data/walking/11_kalman_estimator2_.txt",
-  "/home/jhk/data/walking/12_kalman_estimator1_.txt",
-  "/home/jhk/data/walking/13_kalman_estimator3_.txt",
-  "/home/jhk/data/walking/14_grav_torque_.txt"
+  "/home/myeongju/data/walking/0_desired_zmp_.txt",
+  "/home/myeongju/data/walking/1_desired_com_.txt",
+  "/home/myeongju/data/walking/2_desired_q_.txt",
+  "/home/myeongju/data/walking/3_real_q_.txt",
+  "/home/myeongju/data/walking/4_desired_swingfoot_.txt",
+  "/home/myeongju/data/walking/5_desired_pelvis_trajectory_.txt",
+  "/home/myeongju/data/walking/6_current_com_pelvis_trajectory_.txt",
+  "/home/myeongju/data/walking/7_current_foot_trajectory_.txt",
+  "/home/myeongju/data/walking/8_QPestimation_variables_.txt",
+  "/home/myeongju/data/walking/9_ft_sensor_.txt",
+  "/home/myeongju/data/walking/10_ext_encoder_.txt",
+  "/home/myeongju/data/walking/11_kalman_estimator2_.txt",
+  "/home/myeongju/data/walking/12_kalman_estimator1_.txt",
+  "/home/myeongju/data/walking/13_kalman_estimator3_.txt",
+  "/home/myeongju/data/walking/14_grav_torque_.txt"
 
 };
 
@@ -102,11 +102,11 @@ public:
   void parameterSetting();
   //functions in compute
   void getRobotState();
-  void getComTrajectory();
+  void getComTrajectory_MJ();
   void getZmpTrajectory();
   void getPelvTrajectory();
-  void getFootTrajectory();
-  void computeIkControl(Eigen::Isometry3d float_trunk_transform, Eigen::Isometry3d float_lleg_transform, Eigen::Isometry3d float_rleg_transform, Eigen::Vector12d& desired_leg_q);
+  void getFootTrajectory_MJ();
+  void computeIkControl_MJ(Eigen::Isometry3d float_trunk_transform, Eigen::Isometry3d float_lleg_transform, Eigen::Isometry3d float_rleg_transform, Eigen::Vector12d& desired_leg_q);
   void computeJacobianControl(Eigen::Isometry3d float_lleg_transform, Eigen::Isometry3d float_rleg_transform, Eigen::Vector3d float_lleg_transform_euler, Eigen::Vector3d float_rleg_transform_euler, Eigen::Vector12d& desired_leg_q_dot);
   void compensator();
 
@@ -119,6 +119,8 @@ public:
   void addZmpOffset();
   void zmpGenerator(const unsigned int norm_size, const unsigned planning_step_num);
   void onestepZmp(unsigned int current_step_number, Eigen::VectorXd& temp_px, Eigen::VectorXd& temp_py);
+  void onestepZmp_MJ(unsigned int current_step_number, Eigen::VectorXd& temp_px, Eigen::VectorXd& temp_py);
+  void OfflineCoM_MJ(unsigned int current_step_number, Eigen::VectorXd& temp_cx, Eigen::VectorXd& temp_cy);
   void calculateFootStepSeparate();
   void calculateFootStepTotal();
   void usingFootStepPlanner();
@@ -128,7 +130,7 @@ public:
   void hipCompensation();
 
   //PreviewController
-  void modifiedPreviewControl();
+  void modifiedPreviewControl_MJ();
   void previewControl(double dt, int NL, int tick, double x_i, double y_i, Eigen::Vector3d xs,
                       Eigen::Vector3d ys, double ux_1 , double uy_1 ,
                       double& ux, double& uy, double gi, Eigen::VectorXd gp_l,
@@ -137,8 +139,26 @@ public:
   void previewControlParameter(double dt, int NL, Eigen::Matrix4d& k, Eigen::Vector3d com_support_init_,
                                double& gi, Eigen::VectorXd& gp_l, Eigen::Matrix1x3d& gx, Eigen::Matrix3d& a,
                                Eigen::Vector3d& b, Eigen::Matrix1x3d& c);
+  void preview_MJ(double dt, int NL, int tick, double x_i, double y_i, Eigen::Vector3d xs,Eigen::Vector3d ys, double& ux, double& uy, 
+       double gi, Eigen::VectorXd gp_l, Eigen::Matrix1x3d gx, Eigen::Matrix3d a, Eigen::Vector3d b, Eigen::Matrix1x3d c, Eigen::Vector3d &xd, Eigen::Vector3d &yd);
+  void previewParam_MJ(double dt, int NL, Eigen::Matrix4d& k, Eigen::Vector3d com_support_init_, double& gi, Eigen::VectorXd& gp_l, Eigen::Matrix1x3d& gx, 
+  Eigen::Matrix3d& a, Eigen::Vector3d& b, Eigen::Matrix1x3d& c);
+
+  void preview_MJ_CPM(double dt, int NL, int tick, double x_i, double y_i, Eigen::Vector3d xs, Eigen::Vector3d ys, double& UX, double& UY, 
+       Eigen::MatrixXd Gi, Eigen::VectorXd Gd, Eigen::MatrixXd Gx, Eigen::MatrixXd A, Eigen::VectorXd B, Eigen::MatrixXd A_bar, Eigen::VectorXd B_bar, Eigen::Vector2d &XD, Eigen::Vector2d &YD, Eigen::VectorXd& X_bar_p, Eigen::VectorXd& Y_bar_p);
+  
+  void previewParam_MJ_CPM(double dt, int NL, Eigen::Matrix3d& K, Eigen::Vector3d com_support_init_, Eigen::MatrixXd& Gi, Eigen::VectorXd& Gd, Eigen::MatrixXd& Gx, 
+  Eigen::MatrixXd& A, Eigen::VectorXd& B, Eigen::MatrixXd& C, Eigen::MatrixXd& D, Eigen::MatrixXd& A_bar, Eigen::VectorXd& B_bar);
+
+  void preview_MJ_Act(double dt, int NL, int tick, double x_i, double y_i, Eigen::Vector3d xs, Eigen::Vector3d ys, double& UX, double& UY, 
+       Eigen::MatrixXd Gi, Eigen::VectorXd Gd, Eigen::MatrixXd Gx, Eigen::MatrixXd A, Eigen::VectorXd B, Eigen::Vector3d &XD, Eigen::Vector3d &YD);
+  
+  void previewParam_MJ_Act(double dt, int NL, Eigen::Matrix4d& K, Eigen::Vector3d com_support_init_, Eigen::MatrixXd& Gi, Eigen::VectorXd& Gd, Eigen::MatrixXd& Gx, 
+  Eigen::MatrixXd& A, Eigen::VectorXd& B, Eigen::MatrixXd& C, Eigen::MatrixXd& D, Eigen::MatrixXd& A_bar, Eigen::VectorXd& B_bar);
+                               
   //LQR && External Encoder
   void vibrationControl(const Eigen::Vector12d desired_leg_q, Eigen::Vector12d &output);
+  void vibrationControl_MJ(const Eigen::Vector12d desired_leg_q, Eigen::Vector12d &output);
   void massSpringMotorModel(double spring_k, double damping_d, double motor_k, Eigen::Matrix12d & mass, Eigen::Matrix<double, 36, 36>& a, Eigen::Matrix<double, 36, 12>& b, Eigen::Matrix<double, 12, 36>& c);
   void discreteModel(Eigen::Matrix<double, 36, 36>& a, Eigen::Matrix<double, 36, 12>& b, Eigen::Matrix<double, 12, 36>& c, int np, double dt,
                      Eigen::Matrix<double, 36, 36>& ad, Eigen::Matrix<double, 36, 12>& bd, Eigen::Matrix<double, 12, 36>& cd,
@@ -207,6 +227,7 @@ private:
   const double hz_;
   const double &current_time_; // updated by control_base
   unsigned int walking_tick_ = 0;
+  unsigned int com_tick_ = 0;
   double walking_time_ = 0;
 
   //sensorData
@@ -251,6 +272,8 @@ private:
   double step_length_y_;
 
   //double step_angle_theta_;
+  unsigned int print_flag = 0;
+  unsigned int print_flag_1 = 0;
   double target_x_;
   double target_y_;
   double target_z_;
@@ -267,7 +290,8 @@ private:
   Eigen::MatrixXd foot_step_support_frame_offset_;
 
   Eigen::MatrixXd ref_zmp_;
-
+  Eigen::MatrixXd ref_com_;
+  Eigen::MatrixXd ref_zmp_float_;
 
   VectorQd start_q_;
   VectorQd desired_q_;
@@ -313,7 +337,9 @@ private:
 
   //Step current state variable//
   Eigen::Vector3d com_support_current_;
+  Eigen::Vector3d com_middle_support_current_;
   Eigen::Vector3d com_support_dot_current_;//from support foot
+  Eigen::Vector3d com_support_ddot_current_;//from support foot
   //capture
   Eigen::Isometry3d lfoot_float_current_1;
   Eigen::Isometry3d rfoot_float_current_1;
@@ -347,8 +373,11 @@ private:
   Eigen::Matrix6d current_leg_jacobian_r_;
   DyrosJetModel &model_;
 
-
+  Eigen::Vector3d com_desired_float_;
+  double final_ref_zmp_print = 0 ;
+  double final_com_print = 0 ;
   //desired variables
+  Eigen::Vector12d q_des;
   Eigen::Vector12d desired_leg_q_;
   Eigen::Vector12d desired_leg_q_dot_;
   Eigen::Vector3d com_desired_;
@@ -361,10 +390,10 @@ private:
   Eigen::Vector3d lfoot_trajectory_euler_support_;
   Eigen::Vector6d rfoot_trajectory_dot_support_; //x,y,z translation velocity & roll, pitch, yaw velocity
   Eigen::Vector6d lfoot_trajectory_dot_support_;
-
+ 
   Eigen::Isometry3d pelv_trajectory_support_; //local frame
   Eigen::Isometry3d pelv_trajectory_float_; //pelvis frame
-
+ //
   Eigen::Isometry3d rfoot_trajectory_float_;  //pelvis frame
   Eigen::Isometry3d lfoot_trajectory_float_;
   Eigen::Vector3d rfoot_trajectory_euler_float_;
@@ -381,16 +410,35 @@ private:
   Eigen::Vector3d yd_;
 
   //Preview Control
+  Eigen::Vector3d preview_x, preview_y, preview_x_b, preview_y_b, preview_x_b2, preview_y_b2;
   double ux_, uy_, ux_1_, uy_1_;
   double zc_;
   double gi_;
   double zmp_start_time_; //원래 코드에서는 start_time, zmp_ref 시작되는 time같음
   Eigen::Matrix4d k_;
+  Eigen::Matrix4d K_act_;
   Eigen::VectorXd gp_l_;
   Eigen::Matrix1x3d gx_;
   Eigen::Matrix3d a_;
   Eigen::Vector3d b_;
   Eigen::Matrix1x3d c_;
+  //Preview CPM
+  Eigen::MatrixXd A_;
+  Eigen::VectorXd B_;
+  Eigen::MatrixXd C_;
+  Eigen::MatrixXd D_;
+  Eigen::Matrix3d K_;
+  Eigen::MatrixXd Gi_;
+  Eigen::MatrixXd Gx_;
+  Eigen::VectorXd Gd_;
+  Eigen::MatrixXd A_bar_;
+  Eigen::VectorXd B_bar_;
+  Eigen::Vector2d Preview_X, Preview_Y, Preview_X_b, Preview_Y_b;
+  Eigen::VectorXd X_bar_p_, Y_bar_p_;
+  Eigen::Vector2d XD_;
+  Eigen::Vector2d YD_;
+  double UX_, UY_;
+
 
   //resolved momentum control
   Eigen::Vector3d p_ref_;
@@ -410,6 +458,8 @@ private:
   Eigen::Vector12d pre_link_q_leg_;
   Eigen::Vector12d lqr_output_;
   Eigen::Vector12d lqr_output_pre_;
+  Eigen::Vector12d DOB_IK_output_;
+  Eigen::Vector12d DOB_IK_output_b_;
 
   VectorQd thread_q_;
   unsigned int thread_tick_;
@@ -428,7 +478,7 @@ private:
   Eigen::Matrix<double, 48, 12> bd_total_right_;
   Eigen::Matrix<double, 12, 48> kkk_motor_right_;
 
-  Eigen::Vector12d dist_prev_;
+  Eigen::Vector12d d_hat_b;
 
   bool calc_update_flag_;
   bool calc_start_flag_;
@@ -574,7 +624,6 @@ private:
 
   Eigen::Matrix<double, 8, 4> K_2_;
   Eigen::Matrix<double, 8, 4> K_old_2_;
-
 
   Eigen::Matrix<double, 2, 1> u_old_2_;
 
