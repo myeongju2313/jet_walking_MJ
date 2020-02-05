@@ -119,6 +119,7 @@ public:
   void addZmpOffset();
   void zmpGenerator(const unsigned int norm_size, const unsigned planning_step_num);
   void onestepZmp(unsigned int current_step_number, Eigen::VectorXd& temp_px, Eigen::VectorXd& temp_py);
+  void modified_zmp_trajectory_update(Eigen::Vector3d& LFoot_desired,Eigen::Vector3d& RFoot_desired,Eigen::MatrixXd& Ref_ZMP, Eigen::MatrixXd& modified_Ref_ZMP);
   void onestepZmp_MJ(unsigned int current_step_number, Eigen::VectorXd& temp_px, Eigen::VectorXd& temp_py);
   void OfflineCoM_MJ(unsigned int current_step_number, Eigen::VectorXd& temp_cx, Eigen::VectorXd& temp_cy);
   void calculateFootStepSeparate();
@@ -163,8 +164,7 @@ public:
   void slowCalc();
   void slowCalcContent();
 
-
-
+  
   void discreteRiccatiEquationInitialize(Eigen::MatrixXd a, Eigen::MatrixXd b);
   Eigen::MatrixXd discreteRiccatiEquationLQR(Eigen::MatrixXd A, Eigen::MatrixXd B, Eigen::MatrixXd R, Eigen::MatrixXd Q);
   Eigen::MatrixXd discreteRiccatiEquationPrev(Eigen::MatrixXd a, Eigen::MatrixXd b, Eigen::MatrixXd r, Eigen::MatrixXd q);
@@ -285,6 +285,7 @@ private:
   Eigen::MatrixXd foot_step_support_frame_;
   Eigen::MatrixXd foot_step_support_frame_offset_;
 
+  Eigen::MatrixXd org_ref_zmp_;
   Eigen::MatrixXd ref_zmp_;
   Eigen::MatrixXd ref_com_;
   Eigen::MatrixXd ref_zmp_float_;
@@ -295,6 +296,7 @@ private:
   const VectorQd& current_q_;
   const VectorQd& current_qdot_;
 
+  double prev_zmp_error_y = 0, prev_zmp_error_x = 0;
 
 
   //const double &current_time_;
@@ -322,7 +324,7 @@ private:
   Eigen::Vector6d swingfoot_support_init_;
   Eigen::Vector6d swingfoot_support_init_offset_;
 
-  Eigen::Isometry3d pelv_suppprt_start_;
+  Eigen::Isometry3d pelv_support_start_;
 
   Eigen::Vector3d com_float_init_;
   Eigen::Vector3d com_support_init_;
@@ -332,14 +334,14 @@ private:
   Eigen::Vector3d com_offset_;
 
   //Step current state variable//
+
+  Eigen::Vector3d com_support_current_b;
+  Eigen::Vector3d com_support_current_dot;
   Eigen::Vector3d com_support_current_;
   Eigen::Vector3d com_middle_support_current_;
   Eigen::Vector3d com_support_dot_current_;//from support foot
   Eigen::Vector3d com_support_ddot_current_;//from support foot
-  //capture
-  Eigen::Isometry3d lfoot_float_current_1;
-  Eigen::Isometry3d rfoot_float_current_1;
-  Eigen::Vector3d com_support_current_1;
+  Eigen::Isometry3d com_support_current_MJ;
 
   ///simulation
   Eigen::Vector3d com_sim_current_;
@@ -365,6 +367,7 @@ private:
   Eigen::Isometry3d lfoot_float_current_;
   Eigen::Isometry3d rfoot_float_current_;
 
+  
   Eigen::Matrix6d current_leg_jacobian_l_;
   Eigen::Matrix6d current_leg_jacobian_r_;
   DyrosJetModel &model_;
@@ -403,9 +406,7 @@ private:
   Eigen::Vector3d xs_;
   Eigen::Vector3d ys_;
   Eigen::Vector3d xd_;
-  Eigen::Vector3d yd_;
-  Eigen::Vector3d xd_b;
-  Eigen::Vector3d yd_b;
+  Eigen::Vector3d yd_; 
 
   //Preview Control
   Eigen::Vector3d preview_x, preview_y, preview_x_b, preview_y_b, preview_x_b2, preview_y_b2;

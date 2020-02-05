@@ -17,13 +17,14 @@ ofstream Com_tra_graph("/home/myeongju/Com_tra_graph.txt");
 ofstream Swing_tra_graph("/home/myeongju/Swing_tra_graph.txt");
 ofstream Des_q_tra_graph("/home/myeongju/Des_q_tra_graph.txt");
 ofstream LQR_q_tra_graph("/home/myeongju/LQR_q_tra_graph.txt");
+ofstream MJ_graph("/home/myeongju/MJ_graph.txt");
 
 void WalkingController::compute()
 {
   if((walking_enable_ == true))
   {
 
-    updateInitialState(); // Step change 하기 1tick 
+    updateInitialState(); // Step change
     getRobotState(); // 매 tick 돈다.
     floatToSupportFootstep();
   
@@ -38,14 +39,24 @@ void WalkingController::compute()
       if(current_step_num_< total_step_num_)
       {
         getZmpTrajectory();
+        
+        getFootTrajectory_MJ();
+
+        Eigen::Vector3d Lfoot, Rfoot;
+        
+        Lfoot = lfoot_trajectory_support_.translation();   
+        Rfoot = rfoot_trajectory_support_.translation();          
+        
+        modified_zmp_trajectory_update(Lfoot, Rfoot, org_ref_zmp_, ref_zmp_);
+
         getComTrajectory_MJ();
         getPelvTrajectory();
-        getFootTrajectory_MJ();
+        
         supportToFloatPattern();       
           
         /////////////////////compute/////////////////////////
         if (ik_mode_ == 0)
-        {
+        { 
           computeIkControl_MJ(pelv_trajectory_float_, lfoot_trajectory_float_, rfoot_trajectory_float_, q_des);
           
           for(int i=0; i<12; i++)
@@ -201,14 +212,14 @@ void WalkingController::getRobotState()
   qdot_temp;
   q_temp.segment<28>(6) = current_q_.segment<28>(0); //segment<포함갯수>(시작점) 
   qdot_temp.segment<28>(6)= current_qdot_.segment<28>(0);
-  
+  /*
   if(walking_tick_ > 0) // Using desired joint angle for kinematics update
   {
     q_temp.segment<12>(6) = desired_q_not_compensated_.segment<12>(0); //segment<포함갯수>(시작점), desired_q_not_compensated_ 는 IK에서 구해지는 Desired Joint angle.     
-  }
-  
+  }*/
+
   model_.updateKinematics(q_temp, qdot_temp);
-  
+ 
   com_float_current_ = model_.getCurrentCom(); 
   com_float_current_dot_= model_.getCurrentComDot();
   
@@ -229,22 +240,15 @@ void WalkingController::getRobotState()
   else if(foot_step_(current_step_num_, 6) == 1)
   {
     supportfoot_float_current_ = lfoot_float_current_;
-  }
-
-  Eigen::Vector3d com_support_prev_;
-  Eigen::Vector3d com_support_dot_prev_;
-  
-  com_support_prev_ = com_support_current_;
-  com_support_dot_prev_ = com_support_dot_current_;
-  pelv_support_current_ = DyrosMath::inverseIsometry3d(supportfoot_float_current_);
+  } 
+   
+  pelv_support_current_ = DyrosMath::inverseIsometry3d(supportfoot_float_current_);  
   lfoot_support_current_ = DyrosMath::multiplyIsometry3d(pelv_support_current_,lfoot_float_current_);
   rfoot_support_current_ = DyrosMath::multiplyIsometry3d(pelv_support_current_,rfoot_float_current_);
   com_support_current_ =  DyrosMath::multiplyIsometry3dVector3d(pelv_support_current_, com_float_current_);
   current_leg_jacobian_l_ = model_.getLegJacobian((DyrosJetModel::EndEffector) 0);
-  current_leg_jacobian_r_ = model_.getLegJacobian((DyrosJetModel::EndEffector) 1);
-
-  com_support_dot_current_ = (com_support_current_ - com_support_prev_) / 0.005 ;
-  com_support_ddot_current_ = (com_support_dot_current_ - com_support_dot_prev_) / 0.005 ;
+  current_leg_jacobian_r_ = model_.getLegJacobian((DyrosJetModel::EndEffector) 1); 
+   
   
   if(walking_tick_ == 0)
   {
@@ -264,7 +268,7 @@ void WalkingController::calculateFootStepTotal()
    * algorith: set robot orientation to the destination -> go straight -> set target orientation on the destination
    *
    * foot_step_(current_step_num_, i) is the foot step where the robot will step right after
-   * foot_step_(crrennt_step_num_, 6) = 0 means swingfoot is left(support foot is right)
+   * foot_step_(current_step_num_, 6) = 0 means swingfoot is left(support foot is right)
    */
   // 목표 각도와 거리를 정함 -> 로봇을 회전 시키고, 직진 -> 다시 원상태로 회전 복구.
    
@@ -298,7 +302,7 @@ void WalkingController::calculateFootStepTotal()
   
   if(length_to_target == 0) // 제자리 걸음
   {
-    middle_total_step_number = 50; //walking on the spot 10 times
+    middle_total_step_number = 5; //walking on the spot 10 times
     dlength = 0;
   }
   ////// 목표 x, y 변위, 설정된 step length를 이용해서 middle_total_step number를 구함.
@@ -565,13 +569,16 @@ void WalkingController::getZmpTrajectory()
   unsigned int planning_step_number = 3;
 
   unsigned int norm_size = 0;
-
+  
   if(current_step_num_ >= total_step_num_ - planning_step_number)
-    norm_size = (t_last_-t_start_+1)*(total_step_num_-current_step_num_)+20*hz_;
+    norm_size = (t_last_-t_start_+1)*(total_step_num_-current_step_num_) + 20*hz_;
   else
     norm_size = (t_last_-t_start_+1)*(planning_step_number);
+
   if(current_step_num_ == 0)
-    norm_size = norm_size + t_temp_+1;
+    norm_size = norm_size + t_temp_ + 1;
+
+  //std::cout << t_last_ << "," << t_start_ << "," << norm_size << std::endl;
   addZmpOffset();
   zmpGenerator(norm_size, planning_step_number);  
 }
@@ -584,14 +591,14 @@ void WalkingController::floatToSupportFootstep()
   {
     if(foot_step_(0,6) == 0) //right support
     {
-      reference.translation() = rfoot_float_init_.translation(); 
+      reference.translation() = rfoot_float_init_.translation(); // (1) -> 정확히 -0.127803은 아님. (실제 오차가 있기 때문에.)  
       reference.translation()(2) = 0.0;
       reference.linear() = DyrosMath::rotateWithZ(DyrosMath::rot2Euler(rfoot_float_init_.linear())(2));
       reference.translation()(0) = 0.0;
     }
     else //left support
     {
-      reference.translation() = lfoot_float_init_.translation();  
+      reference.translation() = lfoot_float_init_.translation(); // (1) -> 0.127803  
       reference.translation()(2) = 0.0; // Z는 Pelvis 기준으로 발까지 - 변위 였고,
       reference.linear() = DyrosMath::rotateWithZ(DyrosMath::rot2Euler(lfoot_float_init_.linear())(2)); // Pelvis부터 왼쪽 발의 Rotation Matirx를 alpha, beta, gamma로 바꾸고, gamma(Z 축)만 빼서 Rotation matrix로 다시 바꿈.
       reference.translation()(0) = 0.0; // X는 Pevlis 기준으로 Offset 되어 있는 변위 였다.
@@ -599,9 +606,9 @@ void WalkingController::floatToSupportFootstep()
   }
   else
   {
-    reference.linear() = DyrosMath::rotateWithZ(foot_step_(current_step_num_-1,5)); // 현재 current_step_num에 맞는 계획되어 있는 Gloabal에서 Foot step의 Z방향 회전 각도를 Z회전 Rotation matrix의 변수에 넣는다.
+    reference.linear() = DyrosMath::rotateWithZ(foot_step_(current_step_num_-1,5)); // 현재 current_step_num에 맞는 계획되어 있는 Global에서 Foot step의 Z방향 회전 각도를 Z회전 Rotation matrix의 변수에 넣는다.
     for(int i=0 ;i<3; i++)
-      reference.translation()(i) = foot_step_(current_step_num_-1,i); // 현재 current_step_num에 맞는 계획되어 있는 Gloabal에서 Foot step의 X,Y,Z 좌표를 넣음.
+      reference.translation()(i) = foot_step_(current_step_num_-1,i); // 현재 current_step_num에 맞는 계획되어 있는 Global에서 Foot step의 X,Y,Z 좌표를 넣음.
   } 
 
   Eigen::Vector3d temp_local_position;
@@ -644,8 +651,8 @@ void WalkingController::floatToSupportFootstep()
     }
   }
    
-  for(int j=0;j<3;j++)
-    temp_global_position(j) = swingfoot_float_init_(j); // swingfoot_float_init_은 walking_tick = 0 일때 Pelvis에서 본 Swing 발의 Position, orientation. 
+  for(int j = 0; j < 3; j ++)
+    temp_global_position(j) = swingfoot_float_init_(j); // swingfoot_float_init_은 Pelvis에서 본 Swing 발의 Position, orientation. 
   
   temp_local_position = reference.linear().transpose()*(temp_global_position - reference.translation());
   // 여기서의 temp_local_position은 현재 current_step_num_에 따라 계획된 global에서의 footstep 좌표계에서 맨 처음 Swing발 좌표계를 본 것.
@@ -664,7 +671,7 @@ void WalkingController::floatToSupportFootstep()
   for(int j=0;j<3;j++)
     temp_global_position(j) = supportfoot_float_init_(j);
 
-  temp_local_position = reference.linear().transpose()*(temp_global_position-reference.translation());
+  temp_local_position = reference.linear().transpose()*(temp_global_position - reference.translation());
   // 여기서의 temp_local_position은 현재 current_step_num_에 따라 계획된 global에서의 footstep 좌표계에서 맨 처음 지지발 좌표계를 본 것.
   for(int j=0;j<3;j++)
     supportfoot_support_init_(j) = temp_local_position(j);
@@ -750,7 +757,7 @@ void WalkingController::updateInitialState()
 
     zc_ = com_support_init_(2);
     
-    pelv_suppprt_start_ = pelv_support_init_;
+    pelv_support_start_ = pelv_support_init_;
 
     total_step_num_ = foot_step_.col(1).size();
     
@@ -758,15 +765,15 @@ void WalkingController::updateInitialState()
     yi_ = com_support_init_(1);
     
   }
-  else if(current_step_num_ != 0 && walking_tick_ == t_start_) // step change 할 때.
-  {  
+  else if(current_step_num_ != 0 && walking_tick_ == t_start_) // step change 
+  { std::cout << walking_tick_ << std::endl;
     Eigen::Matrix<double, DyrosJetModel::MODEL_WITH_VIRTUAL_DOF, 1> q_temp, qdot_temp;
     q_temp.setZero();
     qdot_temp;
     q_temp.segment<28>(6) = current_q_.segment<28>(0);
     qdot_temp.segment<28>(6)= current_qdot_.segment<28>(0);  
     
-    q_temp.segment<12>(6) = desired_q_not_compensated_.segment<12>(0);
+    //q_temp.segment<12>(6) = desired_q_not_compensated_.segment<12>(0);
      
     model_.updateKinematics(q_temp, qdot_temp);
      
@@ -795,7 +802,6 @@ void WalkingController::updateInitialState()
     pelv_support_euler_init_ = DyrosMath::rot2Euler(pelv_support_init_.linear());
     rfoot_support_euler_init_ = DyrosMath::rot2Euler(rfoot_support_init_.linear());
     lfoot_support_euler_init_ = DyrosMath::rot2Euler(lfoot_support_init_.linear());
-
   }  
 }
 
@@ -805,7 +811,7 @@ void WalkingController::updateNextStepTime()
   {
     if(current_step_num_ != total_step_num_-1)
     {
-      t_start_ = t_last_ +1; //841 tick
+      t_start_ = t_last_ + 1; //841 tick
       t_start_real_ = t_start_ + t_rest_init_; // 841 + 10 = 851 tick
       t_last_ = t_start_ + t_total_ -1; // 840 + 240 = 1080 tick 
       
@@ -821,6 +827,9 @@ void WalkingController::updateNextStepTime()
 
 void WalkingController::addZmpOffset()
 {
+  //lfoot_zmp_offset_ = -0.02;
+  //rfoot_zmp_offset_ = 0.02;
+
   lfoot_zmp_offset_ = -0.02;
   rfoot_zmp_offset_ = 0.02;
 
@@ -851,7 +860,7 @@ void WalkingController::addZmpOffset()
 }
 
 void WalkingController::zmpGenerator(const unsigned int norm_size, const unsigned planning_step_num)
-{
+{ 
   ref_zmp_.resize(norm_size, 2);
   ref_com_.resize(norm_size, 2);
   com_offset_.setZero();
@@ -867,7 +876,7 @@ void WalkingController::zmpGenerator(const unsigned int norm_size, const unsigne
   {
     for (int i = 0; i <= t_temp_; i++) //600 tick
     {
-      if(i <= 0.5*hz_) 
+      if(i < 0.5*hz_) 
       {
         ref_zmp_(i,0) = com_support_init_(0) + com_offset_(0);
         ref_zmp_(i,1) = com_support_init_(1) + com_offset_(1);
@@ -944,14 +953,133 @@ void WalkingController::zmpGenerator(const unsigned int norm_size, const unsigne
       {
         ref_zmp_(index+j,0) = temp_px(j);
         ref_zmp_(index+j,1) = temp_py(j);
-        ref_com_(index+j, 0) = temp_cx(j);
-        ref_com_(index+j, 1) = temp_cy(j);
+        ref_com_(index+j,0) = temp_cx(j);
+        ref_com_(index+j,1) = temp_cy(j);
       }      
       index = index + t_total_; // 참조 zmp가 이만큼 쌓였다.      
       // 결국 실제 로봇 1Hz마다 720개의 ref_zmp를 생성함. 3.6초
     }   
-  }    
+  }
+              
+  org_ref_zmp_.resize(norm_size, 2);
+  org_ref_zmp_.setZero();
+
+  for (int i=0; i< norm_size; i++)
+  {
+    org_ref_zmp_(i,0) = ref_zmp_(i,0);
+    org_ref_zmp_(i,1) = ref_zmp_(i,1);
+  }
+          
 }
+
+
+void WalkingController::modified_zmp_trajectory_update(Eigen::Vector3d& LFoot_desired,Eigen::Vector3d& RFoot_desired,Eigen::MatrixXd& Ref_ZMP, Eigen::MatrixXd& modified_Ref_ZMP)
+ {
+   ///// control error calculate /////
+   
+   Eigen::Vector3d swing_foot_error;
+   if (foot_step_(current_step_num_, 6) == 1) // swing foot : right
+   { swing_foot_error = RFoot_desired - rfoot_support_current_.translation(); }
+   else
+   { swing_foot_error = LFoot_desired - lfoot_support_current_.translation(); } 
+   
+   int start_time;
+   if (current_step_num_ == 0)
+     start_time = t_start_;
+   else
+     start_time = 0;
+
+   modified_Ref_ZMP = Ref_ZMP;
+    
+   if(walking_tick_ == 0)
+   {
+     prev_zmp_error_x = 0;
+     prev_zmp_error_y = 0;
+   }
+      
+   for (int i = 0; i < t_rest_init_ + t_double1_ - 1; i++) //첫 DSP 구간
+   {
+     /*if (i < t_rest_init_) // 10tick 동안 10개의 ZMP를 똑같이 올림
+     {
+       modified_Ref_ZMP(i, 0) = modified_Ref_ZMP(i, 0) - 0.5*prev_zmp_error_x; //0.5를 곱하는 이유 : ZMP Planning의 첫 DSP 구간이 이전 지지발과의 중심위치부터 시작이기 때문.
+       modified_Ref_ZMP(i, 1) = modified_Ref_ZMP(i, 1) - 0.5*prev_zmp_error_y; 
+       std::cout << Ref_ZMP(i, 0) << "," << modified_Ref_ZMP(i, 0) << "," << -0.5*prev_zmp_error_x << "," << i << std::endl;
+       
+     }
+     else // 20tick 동안 20개의 ZMP를 비례적으로 올림.
+     {
+       modified_Ref_ZMP(i, 0) = modified_Ref_ZMP(i, 0) - 0.5*prev_zmp_error_x*(t_rest_init_ + t_double1_ - i)/t_double1_;
+       modified_Ref_ZMP(i, 1) = modified_Ref_ZMP(i, 1) - 0.5*prev_zmp_error_y*(t_rest_init_ + t_double1_ - i)/t_double1_;
+       std::cout << Ref_ZMP(i, 0) << "," << modified_Ref_ZMP(i, 0) << "," << - 0.5*prev_zmp_error_x*(t_rest_init_ + t_double1_ - i)/t_double1_ << "," << i << std::endl;
+     }*/
+     
+     //MJ
+     modified_Ref_ZMP(i, 0) = modified_Ref_ZMP(i, 0) - 0.5*prev_zmp_error_x*(t_rest_init_ + t_double1_ - i)/(t_double1_ + t_rest_init_);
+     modified_Ref_ZMP(i, 1) = modified_Ref_ZMP(i, 1) - 0.5*prev_zmp_error_y*(t_rest_init_ + t_double1_ - i)/(t_double1_ + t_rest_init_);
+     
+   }
+    
+   for (int i = 0; i < t_total_; i++)
+   {
+     if (i >= t_rest_init_ && i < t_rest_init_ + t_double1_)
+     {
+       modified_Ref_ZMP(start_time + i, 0) = modified_Ref_ZMP(start_time + i, 0);
+       modified_Ref_ZMP(start_time + i, 1) = modified_Ref_ZMP(start_time + i, 1);
+       //std::cout << Ref_ZMP(i, 0) << "," << modified_Ref_ZMP(i, 0) << "," << - 0.5*prev_zmp_error_x*(t_rest_init_ + t_double1_ - i)/(t_double1_ + t_rest_init_) << "," << i << std::endl;       
+     }  
+     else if (i >= t_rest_init_ + t_double1_ && i < t_total_ - t_double2_ - t_rest_last_) // SSP 구간, 그대로
+     {
+       modified_Ref_ZMP(start_time + i, 0) = modified_Ref_ZMP(start_time + i, 0);
+       modified_Ref_ZMP(start_time + i, 1) = modified_Ref_ZMP(start_time + i, 1);
+     }
+     else if (i >= t_total_ - t_rest_last_ - t_double2_ && i < t_total_ ) // 1.05 ~ 1.2
+     {
+       modified_Ref_ZMP(start_time + i, 0) = modified_Ref_ZMP(start_time + i, 0) - 0.5*swing_foot_error(0)*(i + 1 - (t_total_ - t_rest_last_ - t_double2_)) / (t_double2_ + t_rest_last_);
+       modified_Ref_ZMP(start_time + i, 1) = modified_Ref_ZMP(start_time + i, 1) - 0.5*swing_foot_error(1)*(i + 1 - (t_total_ - t_rest_last_ - t_double2_)) / (t_double2_ + t_rest_last_);       
+       //std::cout << Ref_ZMP(i, 0) << "," << modified_Ref_ZMP(i, 0) << "," << - 0.5*swing_foot_error(0)*(i + 1 - (t_total_ - t_rest_last_ - t_double2_)) / (t_double2_ + t_rest_last_) << "," << i << std::endl;
+     }
+     /*
+     else if (i >= t_total_ - t_rest_last_ - t_double2_ && i < t_total_ - t_rest_last_) // 1.05 ~ 1.15
+     {
+       modified_Ref_ZMP(start_time + i, 0) = modified_Ref_ZMP(start_time + i, 0) - 0.5*swing_foot_error(0)*(i + 1 - (t_total_ - t_rest_last_ - t_double2_)) / t_double2_;
+       modified_Ref_ZMP(start_time + i, 1) = modified_Ref_ZMP(start_time + i, 1) - 0.5*swing_foot_error(1)*(i + 1 - (t_total_ - t_rest_last_ - t_double2_)) / t_double2_;       
+       std::cout << Ref_ZMP(i, 0) << "," << modified_Ref_ZMP(i, 0) << "," << - 0.5*swing_foot_error(0)*(i + 1 - (t_total_ - t_rest_last_ - t_double2_)) / t_double2_ << "," << i << std::endl;
+     }
+     
+     else if (i >= t_total_ - t_rest_last_ && i < t_total_) // 1.15 ~ 1.2
+     {
+       modified_Ref_ZMP(start_time + i, 0) = Ref_ZMP(start_time + i, 0) - 0.5*swing_foot_error(0);
+       modified_Ref_ZMP(start_time + i, 1) = Ref_ZMP(start_time + i, 1) - 0.5*swing_foot_error(1);
+       std::cout << Ref_ZMP(i, 0) << "," << modified_Ref_ZMP(i, 0) << "," << - 0.5*swing_foot_error(0) << "," << i << std::endl;       
+     }*/
+   }
+  
+   if (current_step_num_ < total_step_num_)
+   { 
+     for (int i = 0; i < t_rest_init_ + t_double1_ - 1; i ++)
+     {
+       /*if (i < t_rest_init_)
+       {
+         modified_Ref_ZMP(start_time + t_total_ + i, 0) = modified_Ref_ZMP(start_time + t_total_ + i, 0) - 0.5*swing_foot_error(0);
+         modified_Ref_ZMP(start_time + t_total_ + i, 1) = modified_Ref_ZMP(start_time + t_total_ + i, 1) - 0.5*swing_foot_error(1);         
+       }
+       else
+       {
+         modified_Ref_ZMP(start_time + t_total_ + i, 0) = modified_Ref_ZMP(start_time + t_total_ + i, 0) - 0.5*swing_foot_error(0)*(t_rest_init_ + t_double1_ - i + 1) / t_double1_;
+         modified_Ref_ZMP(start_time + t_total_ + i, 1) = modified_Ref_ZMP(start_time + t_total_ + i, 1) - 0.5*swing_foot_error(1)*(t_rest_init_ + t_double1_ - i + 1) / t_double1_;         
+       }*/
+        
+       modified_Ref_ZMP(start_time + t_total_ + i, 0) = modified_Ref_ZMP(start_time + t_total_ + i, 0) - 0.5*swing_foot_error(0)*(t_rest_init_ + t_double1_ - i + 1) / (t_double1_ + t_rest_init_);
+       modified_Ref_ZMP(start_time + t_total_ + i, 1) = modified_Ref_ZMP(start_time + t_total_ + i, 1) - 0.5*swing_foot_error(1)*(t_rest_init_ + t_double1_ - i + 1) / (t_double1_ + t_rest_init_);         
+     }
+   }
+
+   if(walking_tick_ == t_start_ + t_total_ - 1)// step change 1tick 전
+   {
+     prev_zmp_error_x = - swing_foot_error(0);
+     prev_zmp_error_y = - swing_foot_error(1);
+   }
+ }
 
 void WalkingController::OfflineCoM_MJ(unsigned int current_step_number, Eigen::VectorXd& temp_cx, Eigen::VectorXd& temp_cy)
 {
@@ -1064,7 +1192,7 @@ void WalkingController::OfflineCoM_MJ(unsigned int current_step_number, Eigen::V
     }
   }    
 }
-
+/*
 void WalkingController::onestepZmp_MJ(unsigned int current_step_number, Eigen::VectorXd& temp_px, Eigen::VectorXd& temp_py)
 {
   temp_px.resize(t_total_); // 함수가 실행 될 때 마다, 240 tick의 참조 ZMP를 담는다. Realtime = 1.2초
@@ -1162,14 +1290,15 @@ void WalkingController::onestepZmp_MJ(unsigned int current_step_number, Eigen::V
   }
   
 }
-/*
+*/
+
 void WalkingController::onestepZmp_MJ(unsigned int current_step_number, Eigen::VectorXd& temp_px, Eigen::VectorXd& temp_py)
 {
   temp_px.resize(t_total_); // 함수가 실행 될 때 마다, 240 tick의 참조 ZMP를 담는다. Realtime = 1.2초
   temp_py.resize(t_total_);
   temp_px.setZero();
   temp_py.setZero();
-
+  
   double Kx = 0, Kx2 = 0, Ky = 0, Ky2 = 0;
   if(current_step_number == 0)
   {
@@ -1177,7 +1306,7 @@ void WalkingController::onestepZmp_MJ(unsigned int current_step_number, Eigen::V
     Ky = supportfoot_support_init_offset_(1) - (com_offset_(1) + com_support_init_(1));
     Kx2 = (foot_step_support_frame_(current_step_number,0) - supportfoot_support_init_(0))/2 - supportfoot_support_init_offset_(0);
     Ky2 = (foot_step_support_frame_(current_step_number,1) - supportfoot_support_init_(1))/2 - supportfoot_support_init_offset_(1);
-    
+ 
     for(int i = 0; i < t_total_; i++)
     {
       if(i < t_rest_init_) //0 ~ 0.05초 , 0 ~ 10 tick
@@ -1195,16 +1324,11 @@ void WalkingController::onestepZmp_MJ(unsigned int current_step_number, Eigen::V
         temp_px(i) = supportfoot_support_init_offset_(0);
         temp_py(i) = supportfoot_support_init_offset_(1);
       }
-      else if(i >= t_total_ - t_rest_last_ - t_double2_  && i < t_total_ - t_rest_last_) //1.05 ~ 1.15초 , 210 ~ 230 tick 
+      else if(i >= t_total_ - t_rest_last_ - t_double2_  && i < t_total_ ) //1.05 ~ 1.15초 , 210 ~ 230 tick 
       {
-        temp_px(i) = supportfoot_support_init_offset_(0) + Kx2 / t_double2_ * (i+1 - (t_total_ - t_rest_last_ - t_double2_));
-        temp_py(i) = supportfoot_support_init_offset_(1) + Ky2 / t_double2_ * (i+1 - (t_total_ - t_rest_last_ - t_double2_));
-      }
-      else //1.15 ~ 1.2초 , 230 ~ 240 tick
-      {
-        temp_px(i) = temp_px(i-1);
-        temp_py(i) = temp_py(i-1);
-      }
+        temp_px(i) = supportfoot_support_init_offset_(0) + Kx2 / (t_rest_last_ + t_double2_) * (i+1 - (t_total_ - t_rest_last_ - t_double2_));
+        temp_py(i) = supportfoot_support_init_offset_(1) + Ky2 / (t_rest_last_ + t_double2_) * (i+1 - (t_total_ - t_rest_last_ - t_double2_));
+      } 
     }
   
   }
@@ -1217,30 +1341,20 @@ void WalkingController::onestepZmp_MJ(unsigned int current_step_number, Eigen::V
 
     for(int i = 0; i < t_total_; i++)
     {
-      if(i < t_rest_init_) //0 ~ 0.05초 , 0 ~ 10 tick
-      { // current_step_num = 1 일때, supportfoot_support_init이 foot_step_support_frame_(current_step_number-2, 0) 의 역할을 해서 -0.2의 값을 갖는다.
-        temp_px(i) = (foot_step_support_frame_(current_step_number-1, 0) + supportfoot_support_init_(0))/2 ;  
-        temp_py(i) = (foot_step_support_frame_(current_step_number-1, 1) + supportfoot_support_init_(1))/2 ;
-      }
-      else if(i >= t_rest_init_ && i < t_rest_init_ + t_double1_) //0.05 ~ 0.15초 , 10 ~ 30 tick
+      if(i < t_rest_init_ + t_double1_) //0.05 ~ 0.15초 , 10 ~ 30 tick
       {
-        temp_px(i) = (foot_step_support_frame_(current_step_number-1, 0) + supportfoot_support_init_(0))/2 + Kx / t_double1_ * (i+1 - t_rest_init_);
-        temp_py(i) = (foot_step_support_frame_(current_step_number-1, 1) + supportfoot_support_init_(1))/2 + Ky / t_double1_ * (i+1 - t_rest_init_);
+        temp_px(i) = (foot_step_support_frame_(current_step_number-1, 0) + supportfoot_support_init_(0))/2 + Kx / (t_rest_init_ + t_double1_) * (i+1);
+        temp_py(i) = (foot_step_support_frame_(current_step_number-1, 1) + supportfoot_support_init_(1))/2 + Ky / (t_rest_init_ + t_double1_) * (i+1);
       }
       else if(i >= t_rest_init_ + t_double1_ && i < t_total_ - t_rest_last_ - t_double2_) //0.15 ~ 1.05초 , 30 ~ 210 tick
       {
         temp_px(i) = foot_step_support_frame_offset_(current_step_number-1, 0);
         temp_py(i) = foot_step_support_frame_offset_(current_step_number-1, 1);
       }
-      else if(i >= t_total_ - t_rest_last_ - t_double2_ && i < t_total_ - t_rest_last_) //1.05 ~ 1.15초 , 210 ~ 230 tick 
+      else if(i >= t_total_ - t_rest_last_ - t_double2_ && i < t_total_ ) //1.05 ~ 1.2초 , 210 ~ 240 tick 
       {
-        temp_px(i) = foot_step_support_frame_offset_(current_step_number-1, 0) + Kx2 / t_double2_ * (i+1 - (t_total_ - t_rest_last_ - t_double2_));
-        temp_py(i) = foot_step_support_frame_offset_(current_step_number-1, 1) + Ky2 / t_double2_ * (i+1 - (t_total_ - t_rest_last_ - t_double2_));
-      }
-      else //1.15 ~ 1.2초 , 230 ~ 240 tick
-      {
-        temp_px(i) = temp_px(i-1);
-        temp_py(i) = temp_py(i-1);
+        temp_px(i) = foot_step_support_frame_offset_(current_step_number-1, 0) + Kx2/(t_double2_ + t_rest_last_)*(i+1 - (t_total_ - t_rest_last_ - t_double2_));
+        temp_py(i) = foot_step_support_frame_offset_(current_step_number-1, 1) + Ky2/(t_double2_ + t_rest_last_)*(i+1 - (t_total_ - t_rest_last_ - t_double2_));
       }
     }
   }
@@ -1253,53 +1367,42 @@ void WalkingController::onestepZmp_MJ(unsigned int current_step_number, Eigen::V
 
     for(int i = 0; i < t_total_; i++)
     {
-      if(i < t_rest_init_) //0 ~ 0.05초 , 0 ~ 10 tick
+      if(i < t_rest_init_ + t_double1_) //0 ~ 0.15초 , 0 ~ 30 tick
       {
-        temp_px(i) = (foot_step_support_frame_(current_step_number-2, 0) + foot_step_support_frame_(current_step_number-1, 0))/2;
-        temp_py(i) = (foot_step_support_frame_(current_step_number-2, 1) + foot_step_support_frame_(current_step_number-1, 1))/2;
-      }
-      else if(i >= t_rest_init_ && i < t_rest_init_ + t_double1_) //0.05 ~ 0.15초 , 10 ~ 30 tick
-      {
-        temp_px(i) = (foot_step_support_frame_(current_step_number-2, 0) + foot_step_support_frame_(current_step_number-1, 0))/2 + Kx/t_double1_*(i+1 - t_rest_init_);
-        temp_py(i) = (foot_step_support_frame_(current_step_number-2, 1) + foot_step_support_frame_(current_step_number-1, 1))/2 + Ky/t_double1_*(i+1 - t_rest_init_);
+        temp_px(i) = (foot_step_support_frame_(current_step_number-2, 0) + foot_step_support_frame_(current_step_number-1, 0))/2 + Kx/(t_rest_init_+t_double1_)*(i+1);
+        temp_py(i) = (foot_step_support_frame_(current_step_number-2, 1) + foot_step_support_frame_(current_step_number-1, 1))/2 + Ky/(t_rest_init_+t_double1_)*(i+1);
       }
       else if(i >= t_rest_init_ + t_double1_ && i < t_total_ - t_rest_last_ - t_double2_) //0.15 ~ 1.05초 , 30 ~ 210 tick
       {
         temp_px(i) = foot_step_support_frame_offset_(current_step_number-1, 0);
         temp_py(i) = foot_step_support_frame_offset_(current_step_number-1, 1);
       }
-      else if(i >= t_total_ - t_rest_last_ - t_double2_ && i < t_total_ - t_rest_last_) //1.05 ~ 1.15초 , 210 ~ 230 tick 
+      else if(i >= t_total_ - t_rest_last_ - t_double2_ && i < t_total_ ) //1.05 ~ 1.2초 , 210 ~ 240 tick 
       {
-        temp_px(i) = foot_step_support_frame_offset_(current_step_number-1, 0) + Kx2/t_double2_*(i+1 - (t_total_ - t_rest_last_ - t_double2_));
-        temp_py(i) = foot_step_support_frame_offset_(current_step_number-1, 1) + Ky2/t_double2_*(i+1 - (t_total_ - t_rest_last_ - t_double2_));
-      }
-      else //1.15 ~ 1.2초 , 230 ~ 240 tick
-      {
-        temp_px(i) = temp_px(i-1);
-        temp_py(i) = temp_py(i-1);
+        temp_px(i) = foot_step_support_frame_offset_(current_step_number-1, 0) + Kx2/(t_double2_ + t_rest_last_)*(i+1 - (t_total_ - t_rest_last_ - t_double2_));
+        temp_py(i) = foot_step_support_frame_offset_(current_step_number-1, 1) + Ky2/(t_double2_ + t_rest_last_)*(i+1 - (t_total_ - t_rest_last_ - t_double2_));
       }
       
     }
   }
   
 }
-*/
+
 void WalkingController::getComTrajectory_MJ()
 { 
-  // on-line preview 
-  //xs_(0) = com_support_current_(0); ys_(0) = com_support_current_(1);
-    
+  // Act CoM preview 
+  xs_(0) = com_support_current_(0); ys_(0) = com_support_current_(1);
+      
   modifiedPreviewControl_MJ();
+    
+  // Des CoM preview 
+  //xs_(0) = xd_(0); ys_(0) = yd_(0);    
+  // Des, Act CoM preview 
+  //xs_(1) = xd_(1); ys_(1) = yd_(1); 
+  //xs_(2) = xd_(2); ys_(2) = yd_(2);
   
-  // off-line preview
-  xs_(0) = xd_(0); ys_(0) = yd_(0);    
-  // On,off-line preview 
-  xs_(1) = xd_(1); ys_(1) = yd_(1); 
-  xs_(2) = xd_(2); ys_(2) = yd_(2);
-  
-  // CPM Preview
-  //xs_(1) = X_bar_p_(1)/0.005; ys_(1) = Y_bar_p_(1)/0.005;
-  //xs_(2) = X_bar_p_(2)/0.005; ys_(2) = Y_bar_p_(2)/0.005;
+  // CLIPM Preview 
+  xs_(1) = XD_(1); ys_(1) = YD_(1);   
 
   if (walking_tick_ == t_start_ + t_total_-1 && current_step_num_ != total_step_num_-1) // 지지 발이 바뀌기 1tick 전 
   { // 지지 발이 바뀌기 1tick 전에 아래의 작업을 하는 이유는 지지 발이 바뀌는 순간에도 이전 tick의 CoM desired를 써야하는데 이전 tick의 CoM desired는 이전 지지 발에서 생성한 것이기 때문.
@@ -1310,14 +1413,28 @@ void WalkingController::getComTrajectory_MJ()
     Eigen::Vector3d com_vel;
     Eigen::Vector3d com_acc_prev;
     Eigen::Vector3d com_acc;
-
+    //
+    Eigen::Vector3d com_u_prev;
+    Eigen::Vector3d com_u;
+    //
     Eigen::Matrix3d temp_rot;
     Eigen::Vector3d temp_pos;
     
     temp_rot = DyrosMath::rotateWithZ(-foot_step_support_frame_(current_step_num_,5)); // 회전
-    for(int i=0; i<3; i++)
-      temp_pos(i) = foot_step_support_frame_(current_step_num_,i);
-
+    /*for(int i=0; i<3; i++)
+      temp_pos(i) = foot_step_support_frame_(current_step_num_,i); 
+     */  
+    if(foot_step_(current_step_num_,6) == 0)
+    {
+      temp_pos(0) = lfoot_support_current_.translation()(0);
+      temp_pos(1) = lfoot_support_current_.translation()(1);
+    }
+    else
+    {
+      temp_pos(0) = rfoot_support_current_.translation()(0);
+      temp_pos(1) = rfoot_support_current_.translation()(1);
+    }  
+    
     com_pos_prev(0) = xs_(0);
     com_pos_prev(1) = ys_(0);
     com_pos = temp_rot*(com_pos_prev - temp_pos);
@@ -1331,15 +1448,27 @@ void WalkingController::getComTrajectory_MJ()
     com_acc_prev(1) = ys_(2);
     com_acc_prev(2) = 0.0;
     com_acc = temp_rot*com_acc_prev;
-    // xs_ => com의 위치, 속도, 가속도
+
+    com_u_prev(0) = UX_;
+    com_u_prev(1) = UY_;
+    com_u = temp_rot*(com_u_prev - temp_pos);
+
     xs_(0) = com_pos(0);
     ys_(0) = com_pos(1);
     xs_(1) = com_vel(0);
     ys_(1) = com_vel(1);
     xs_(2) = com_acc(0);
     ys_(2) = com_acc(1);
-  }
 
+    // Act CoM preview
+    //preview_x = xs_;
+    //preview_y = ys_;
+    
+    // CLIPM Preview        
+    UX_ = com_u(0);
+    UY_ = com_u(1);      
+  }
+   
   double start_time;
 
   if(current_step_num_ == 0)
@@ -1403,21 +1532,23 @@ void WalkingController::getComTrajectory_MJ()
       }
       //Com_tra_graph << com_desired_(0) << "," << com_desired_(1) << "," << com_support_current_(0) << "," << com_support_current_(1) << std::endl;
       com_tick_ ++;      
-    }*/
-
-    //CPM Preview
-    //com_desired_(0) = XD_(0); 
-    //com_desired_(1) = YD_(0);
-    com_desired_(0) = xd_(0); // xd_, yd_ 대신 xs_, ys_를 쓰면 지지 발이 바뀌는 순간 이전 tick의 CoM desired를 바라보는 시점이 바뀌지 않아서 안됨.
-    com_desired_(1) = yd_(0);
-    com_desired_(2) = DyrosMath::cubic(walking_tick_, t_start_, t_start_real_, pelv_support_init_.translation()(2), pelv_suppprt_start_.translation()(2), 0, 0);
-    
+    }
+    */
+    // CLIPM Preview
+    com_desired_(0) = XD_(0); 
+    com_desired_(1) = YD_(0);
+    // Des, Act Preview
+    //com_desired_(0) = xd_(0); 
+    //com_desired_(1) = yd_(0);
+    //com_desired_(2) = DyrosMath::cubic(walking_tick_, t_start_, t_start_real_, pelv_support_init_.translation()(2), pelv_support_start_.translation()(2), 0, 0);
+    com_desired_(2) = pelv_support_start_.translation()(2);
+    //std::cout << com_desired_(2) << std::endl;
   }
   else
   {
     com_desired_(0) = xd_(0);
     com_desired_(1) = yd_(0);
-    com_desired_(2) = DyrosMath::cubic(walking_tick_, t_start_, t_start_real_, pelv_support_init_.translation()(2), pelv_suppprt_start_.translation()(2), 0, 0);
+    com_desired_(2) = pelv_support_start_.translation()(2);
   }
 }
 
@@ -1428,18 +1559,12 @@ void WalkingController::getPelvTrajectory()
   //Trunk Position
   if(com_control_mode_ == true)
   {
-    double kp = 1.50;
-    if(estimator_flag_ == false || l_ft_(2)+r_ft_(2)<0.7*51*9.81)
-    {
-      pelv_trajectory_support_.translation()(0) = pelv_support_current_.translation()(0) + kp*(com_desired_(0) - com_support_current_(0));
-      pelv_trajectory_support_.translation()(1) = pelv_support_current_.translation()(1) + kp*(com_desired_(1) - com_support_current_(1));
-    }
-    else
-    {
-      pelv_trajectory_support_.translation()(0) = pelv_support_current_.translation()(0) + kp*(com_desired_(0) - X_hat_post_2_(0));
-      pelv_trajectory_support_.translation()(1) = pelv_support_current_.translation()(1) + kp*(com_desired_(1) - X_hat_post_2_(1));
-    }
-    pelv_trajectory_support_.translation()(2) = com_desired_(2); //_T_Trunk_support.translation()(2) + kp*(_COM_desired(2) - _COM_real_support(2));
+    double kp = 1.5;
+    
+    pelv_trajectory_support_.translation()(0) = pelv_support_current_.translation()(0) + kp*(com_desired_(0) - com_support_current_(0));
+    pelv_trajectory_support_.translation()(1) = pelv_support_current_.translation()(1) + kp*(com_desired_(1) - com_support_current_(1));
+    pelv_trajectory_support_.translation()(2) = com_desired_(2);  
+    
   }  
 
   //Trunk orientation
@@ -1540,7 +1665,7 @@ void WalkingController::getFootTrajectory_MJ()
       }        
       else
       {
-        if(current_step_num_ >=2 ) // 오른발이 먼저 나가니까 current_step_num_ 이 1일때 고려 안했음.
+        if(current_step_num_ >=2 ) // 오른발이 먼저 나가니까 current_step_num_이 1일때 고려 안했음.
         {
           rfoot_trajectory_support_.translation()(0) = DyrosMath::cubic(walking_tick_,t_start_,t_start_ + t_double1_ + t_rest_init_,foot_step_support_frame_(current_step_num_-2,0),rfoot_support_init_.translation()(0),0.0,0.0);
           rfoot_trajectory_support_.translation()(1) = DyrosMath::cubic(walking_tick_,t_start_,t_start_ + t_double1_ + t_rest_init_,foot_step_support_frame_(current_step_num_-2,1),rfoot_support_init_.translation()(1),0.0,0.0);
@@ -1676,10 +1801,8 @@ void WalkingController::getFootTrajectory_MJ()
     }
   }
   
-  Swing_tra_graph << rfoot_trajectory_support_.translation()(0) << "," << rfoot_trajectory_support_.translation()(1) << "," << rfoot_trajectory_support_.translation()(2) 
-  << "," << lfoot_trajectory_support_.translation()(0) << "," << lfoot_trajectory_support_.translation()(1) << "," << lfoot_trajectory_support_.translation()(2) << 
-  "," << lfoot_trajectory_euler_support_(0) << "," << lfoot_trajectory_euler_support_(1) << "," << lfoot_trajectory_euler_support_(2) << "," << rfoot_trajectory_euler_support_(0) << "," << rfoot_trajectory_euler_support_(1) << "," << rfoot_trajectory_euler_support_(2) 
-  << std::endl;  
+  Swing_tra_graph << lfoot_trajectory_support_.translation()(0) << "," << lfoot_trajectory_support_.translation()(1) << "," << lfoot_trajectory_support_.translation()(2) << "," << std::endl;
+    
 }
 
 void WalkingController::supportToFloatPattern()
@@ -1860,11 +1983,12 @@ void WalkingController::modifiedPreviewControl_MJ()
 {
   /////reference: http://www.tandfonline.com/doi/pdf/10.1080/0020718508961156?needAccess=true/////////////
 
-  if(walking_tick_ == 0) // 보행 시작할 때 딱 한번만 구하면 됨.
+  if(walking_tick_ == 0)  
   {    
-   previewParam_MJ(1.0/hz_, 16*hz_/10, K_act_ ,com_support_init_, Gi_, Gd_, Gx_, A_, B_, C_, D_, A_bar_, B_bar_);
-   //previewParam_MJ_CPM(1.0/hz_, 16*hz_/10, K_ ,com_support_init_, Gi_, Gd_, Gx_, A_, B_, C_, D_, A_bar_, B_bar_);
+   //previewParam_MJ(1.0/hz_, 16*hz_/10, K_act_ ,com_support_init_, Gi_, Gd_, Gx_, A_, B_, C_, D_, A_bar_, B_bar_);
+   previewParam_MJ_CPM(1.0/hz_, 16*hz_/10, K_ ,com_support_init_, Gi_, Gd_, Gx_, A_, B_, C_, D_, A_bar_, B_bar_);
 
+   // CLIPM Preview 
    UX_ = com_support_init_(0);
    UY_ = com_support_init_(1);
    xs_(0) = xi_; xs_(1) = 0; xs_(2) = 0;
@@ -1876,16 +2000,16 @@ void WalkingController::modifiedPreviewControl_MJ()
   else
     zmp_start_time_ = t_start_;
       
-  preview_MJ(1.0/hz_, 16*hz_/10, walking_tick_-zmp_start_time_, xi_, yi_, xs_, ys_, UX_, UY_, Gi_, Gd_, Gx_, A_, B_, xd_, yd_);
-  //preview_MJ_CPM(1.0/hz_, 16*hz_/10, walking_tick_-zmp_start_time_, xi_, yi_, xs_, ys_, UX_, UY_, Gi_, Gd_, Gx_, A_, B_, A_bar_, B_bar_, XD_, YD_, X_bar_p_, Y_bar_p_); 
+  //preview_MJ(1.0/hz_, 16*hz_/10, walking_tick_-zmp_start_time_, xi_, yi_, xs_, ys_, UX_, UY_, Gi_, Gd_, Gx_, A_, B_, xd_, yd_);
+  preview_MJ_CPM(1.0/hz_, 16*hz_/10, walking_tick_-zmp_start_time_, xi_, yi_, xs_, ys_, UX_, UY_, Gi_, Gd_, Gx_, A_, B_, A_bar_, B_bar_, XD_, YD_, X_bar_p_, Y_bar_p_); 
 }                                                                   
 
 void WalkingController::previewParam_MJ_CPM(double dt, int NL, Eigen::Matrix3d& K, Eigen::Vector3d com_support_init_, Eigen::MatrixXd& Gi, Eigen::VectorXd& Gd, Eigen::MatrixXd& Gx, 
   Eigen::MatrixXd& A, Eigen::VectorXd& B, Eigen::MatrixXd& C, Eigen::MatrixXd& D, Eigen::MatrixXd& A_bar, Eigen::VectorXd& B_bar)
   { 
-    //double Kp = 2098; double Kv = 32.2;
-    double Kp = 10.35;
-    double Kv = 2.2012;
+    double Kp = 3508; double Kv = 32.2;
+    //double Kp = 50;
+    //double Kv = 6;
     
     A.resize(2,2);
     A(0,0) = 1.0 - Kp*dt*dt*0.5;
@@ -1948,7 +2072,7 @@ void WalkingController::previewParam_MJ_CPM(double dt, int NL, Eigen::Matrix3d& 
 
     Eigen::MatrixXd R;
     R.resize(1,1);
-    R(0,0) = 0.000001;
+    R(0,0) = 1.0;
 
     Eigen::MatrixXd Qx;
     Qx.resize(3,3);
@@ -1960,25 +2084,31 @@ void WalkingController::previewParam_MJ_CPM(double dt, int NL, Eigen::Matrix3d& 
     Q_bar(0,0) = Qe(0,0);
     
     //K = discreteRiccatiEquationLQR(A_bar, B_bar, R, Q_bar);
-    /*K(0,0) = 110.006257148045; 
-    K(0,1) = 5995.685176876064;  
-    K(0,2) = 1618.928784700213; 
-    K(1,1) = 329781.443215973151; 
-    K(1,2) = 89046.148242507566;  
-    K(2,2) = 24043.852923290622;
+    // 150,20, 14000
+    /*K(0,0) = 110.018390877079;
+    K(0,1) = 5996.513970157503;
+    K(0,2) = 1619.215576371881;
+    K(1,1) = 329860.521958015510;
+    K(1,2) = 89069.020403138958;
+    K(2,2) = 24051.153277765603;*/
     
+    // 400,32, 17000
+    /*K(0,0) = 110.011913664238;
+    K(0,1) = 5995.804617080670;
+    K(0,2) = 1619.026391243628;
+    K(1,1) = 329792.857002781064;
+    K(1,2) = 89049.060371173240;
+    K(2,2) = 24045.684616441791;*/     
+    
+    K(0,0) = 110.010847519851;
+    K(0,1) = 5995.687862727833;
+    K(0,2) = 1618.996523648234;
+    K(1,1) = 329793.874898589915;
+    K(1,2) = 89046.189262571512;
+    K(2,2) = 24044.854942667942;
     K(1, 0) = K(0, 1);
     K(2, 0) = K(0, 2);
-    K(2, 1) = K(1, 2);*/
-    K(0,0) = 110.073395244516;
-    K(0,1) = 6002.539472194625;
-    K(0,2) = 1619.933800848508;
-    K(1,1) = 330730.600140600640;
-    K(1,2) = 89149.373787370059;
-    K(2,2) = 24059.898910228723;
-    K(1, 0) = K(0, 1);
-    K(2, 0) = K(0, 2);
-    K(2, 1) = K(1, 2);
+    K(2, 1) = K(1, 2); 
     
     Eigen::MatrixXd Temp_mat;
     Eigen::MatrixXd Temp_mat_inv;
@@ -1991,14 +2121,12 @@ void WalkingController::previewParam_MJ_CPM(double dt, int NL, Eigen::Matrix3d& 
     Ac_bar.resize(3,3);
 
     Temp_mat = R + B_bar_tran * K * B_bar;
-    Temp_mat_inv = Temp_mat.inverse();
-    //std::cout << R << ","<< B_bar_tran << "," << Temp_mat << "," << Temp_mat_inv << std::endl;
+    Temp_mat_inv = Temp_mat.inverse(); 
     Ac_bar = A_bar - B_bar * Temp_mat_inv * B_bar_tran * K * A_bar;
     
     Eigen::MatrixXd Ac_bar_tran(3,3);
     Ac_bar_tran = Ac_bar.transpose();
-
-    //std::cout << Temp_mat <<"," << Temp_mat_inv << std::endl;
+ 
     Gi.resize(1,1); Gx.resize(1,2);
     Gi = Temp_mat_inv * B_bar_tran * K * I_bar ;
     Gx = Temp_mat_inv * B_bar_tran * K * F_bar ;   
@@ -2034,13 +2162,17 @@ void WalkingController::preview_MJ_CPM(double dt, int NL, int tick, double x_i, 
   int zmp_size;
   zmp_size = ref_zmp_.col(1).size(); // 보행 중 720개 (240 * 3)
   Eigen::VectorXd px_ref, py_ref;
+  Eigen::VectorXd org_px_ref, org_py_ref;
   px_ref.resize(zmp_size);
   py_ref.resize(zmp_size);
-  
+  org_px_ref.resize(zmp_size);
+  org_py_ref.resize(zmp_size);
   for(int i = 0; i < zmp_size; i++)
   {
     px_ref(i) = ref_zmp_(i,0);
     py_ref(i) = ref_zmp_(i,1);
+    org_px_ref(i) = org_ref_zmp_(i,0);
+    org_py_ref(i) = org_ref_zmp_(i,1);
   }
   
   Eigen::Matrix1x3d C;
@@ -2053,7 +2185,7 @@ void WalkingController::preview_MJ_CPM(double dt, int NL, int tick, double x_i, 
 
   if(tick == 0 && current_step_num_ == 0)
   { 
-    Preview_X_b(0) = x_i; // 이때 before 값이 없으면 첫 tick에서 delta x의 에러가 갑작스럽게 생겨서 발산
+    Preview_X_b(0) = x_i;  
     Preview_Y_b(0) = y_i;
     Preview_X(0) = x_i;
     Preview_Y(0) = y_i;
@@ -2062,9 +2194,9 @@ void WalkingController::preview_MJ_CPM(double dt, int NL, int tick, double x_i, 
     X_bar_p.setZero(); Y_bar_p.setZero();
   }
   else
-  {  
-    Preview_X(0) = xs(0); Preview_Y(0) = ys(0);    
-    Preview_X(1) = xs(1); Preview_Y(1) = ys(1);
+  {       
+    Preview_X(0) = xs(0); Preview_Y(0) = ys(0);
+    Preview_X(1) = xs(1); Preview_Y(1) = ys(1);     
   }  
   
   Eigen::VectorXd Temp_mat_X, Temp_mat_Y;
@@ -2072,11 +2204,19 @@ void WalkingController::preview_MJ_CPM(double dt, int NL, int tick, double x_i, 
   Temp_mat_X.setZero(); Temp_mat_Y.setZero();  
     
   Temp_mat_X(0) = Preview_X(0); Temp_mat_Y(0) = Preview_Y(0); // preview_x(0)이 x_i를 안넣고 xs를??
-  Temp_mat_X(2) = X_bar_p(2)/dt; Temp_mat_Y(2) = Y_bar_p(2)/dt;
-  //Temp_mat_X(2) = com_support_ddot_current_(0); Temp_mat_Y(2) = com_support_ddot_current_(1); // 값 2개 완전히 같음.  
+  Temp_mat_X(2) = X_bar_p(2)/dt; Temp_mat_Y(2) = Y_bar_p(2)/dt;  // preview_x(1)-preview_x_b(1)로 하면 언더슛생김 일반 프리뷰처럼
   
   px = C*Temp_mat_X;
   py = C*Temp_mat_Y;
+
+  if((int)current_step_num_ % 2 == 0)
+  {
+    Com_tra_graph << xs(0) << "," << ys(0) + 0.127070935 << "," << px(0) << "," << py(0) + 0.129425  << "," << px_ref(tick) << "," << py_ref(tick) + 0.129425 << "," << org_px_ref(tick) << std::endl;
+  }
+  else if((int)current_step_num_ % 2 == 1)
+  {
+    Com_tra_graph << xs(0) << "," << ys(0) - 0.127070935 << "," << px(0) << "," << py(0) - 0.129425  << "," << px_ref(tick) << "," << py_ref(tick) - 0.129425 << "," << org_px_ref(tick) << std::endl;
+  }
    
   X_bar_p(0) = px(0) - px_ref(tick); //e(i) 정의
   Y_bar_p(0) = py(0) - py_ref(tick);
@@ -2091,37 +2231,32 @@ void WalkingController::preview_MJ_CPM(double dt, int NL, int tick, double x_i, 
 
   Eigen::MatrixXd temp; temp.resize(2, 1);
   Eigen::VectorXd GxX(1); Eigen::VectorXd GxY(1);
-  temp(0, 0) = X_bar_p(1);
-  temp(1, 0) = X_bar_p(2);
+
+  temp(0, 0) = X_bar_p(1); //Preview_X(0) - Preview_X_b(0);
+  temp(1, 0) = X_bar_p(2); //Preview_X(1) - Preview_X_b(1);  
   GxX = Gx*temp;
 
-  temp(0, 0) = Y_bar_p(1);
-  temp(1, 0) = Y_bar_p(2);
+  temp(0, 0) = Y_bar_p(1);//Preview_Y(0) - Preview_Y_b(0);
+  temp(1, 0) = Y_bar_p(2);//Preview_Y(1) - Preview_Y_b(1); // 두개 비교 해볼것
   GxY = Gx*temp;
 
   Eigen::MatrixXd del_ux(1,1);
   Eigen::MatrixXd del_uy(1,1);
   del_ux.setZero();
   del_uy.setZero();
-
+ 
   del_ux(0,0) = -(X_bar_p(0) * Gi(0,0)) - GxX(0) - sum_Gd_px_ref;
   del_uy(0,0) = -(Y_bar_p(0) * Gi(0,0)) - GxY(0) - sum_Gd_py_ref;
-
+  
   X_bar_p = A_bar*X_bar_p + B_bar*del_ux;
   Y_bar_p = A_bar*Y_bar_p + B_bar*del_uy;  
 
   UX = UX + del_ux(0,0);
-  UY = UY + del_uy(0,0);
+  UY = UY + del_uy(0,0);    
   
-  Preview_X_b(1) = Preview_X(1); Preview_Y_b(1) = Preview_Y(1);  
- 
   XD = A*Preview_X + B*UX;
-  YD = A*Preview_Y + B*UY;
-  
-  Preview_X(1) = XD(1); Preview_Y(1) = YD(1);
-
-  Com_tra_graph << XD(0) << "," << YD(0) << "," << px(0) << "," << py(0) << "," << px_ref(tick) << "," << py_ref(tick) << "," << X_bar_p(2) << "," << Y_bar_p(2) << std::endl;
-       
+  YD = A*Preview_Y + B*UY;    
+   
 }
 
 void WalkingController::previewParam_MJ(double dt, int NL, Eigen::Matrix4d& K, Eigen::Vector3d com_support_init_, Eigen::MatrixXd& Gi, Eigen::VectorXd& Gd, Eigen::MatrixXd& Gx, 
@@ -2275,26 +2410,48 @@ void WalkingController::preview_MJ(double dt, int NL, int tick, double x_i, doub
   
   if(tick == 0 && current_step_num_ == 0)
   { 
-    preview_x_b(0) = x_i; // 이때 before 값이 없으면 첫 tick에서 delta x의 에러가 갑작스럽게 생겨서 발산
+    preview_x_b(0) = x_i;  
     preview_y_b(0) = y_i;
     preview_x(0) = x_i;
     preview_y(0) = y_i;
   }
   else
   { 
+    // Act CoM preview
     preview_x_b = preview_x;
     preview_y_b = preview_y;
-             
+    //
     preview_x = xs; preview_y = ys;
-    
-    preview_x_b(0) = preview_x(0) - preview_x(1)*0.005;
-    preview_y_b(0) = preview_y(0) - preview_y(1)*0.005;
-  }      
 
+    // Act CoM preview
+    if(walking_tick_ == t_start_ && current_step_num_ != total_step_num_-1)
+    {         
+      preview_x_b(1) = preview_x(1) - preview_x(2)*0.005;
+      preview_y_b(1) = preview_y(1) - preview_y(2)*0.005;      
+      preview_x_b(2) = preview_x(2) - UX*0.005;
+      preview_y_b(2) = preview_y(2) - UY*0.005;  
+    }
+    /*
+    // Des CoM preview       
+    preview_x_b(0) = preview_x(0) - preview_x(1)*0.005; //On-line에서는 안됨. -> (1)이 Desired 값이기 때문에 안맞음.
+    preview_y_b(0) = preview_y(0) - preview_y(1)*0.005;
+    preview_x_b(1) = preview_x(1) - preview_x(2)*0.005;
+    preview_y_b(1) = preview_y(1) - preview_y(2)*0.005;
+    preview_x_b(2) = preview_x(2) - UX*0.005;
+    preview_y_b(2) = preview_y(2) - UY*0.005; 
+    */
+  }      
   px = C*preview_x;
   py = C*preview_y;
   
-  Com_tra_graph << xs(0) << "," << ys(0) << "," << px << "," << py << "," << px_ref(tick) << "," << py_ref(tick)<< "," << xd_(2) << "," << yd_(2) << std::endl;
+  if((int)current_step_num_ % 2 == 0)
+  {
+    Com_tra_graph << xs(0) << "," << ys(0) + 0.127070935 << "," << px << "," << py(0) + 0.129425  << "," << px_ref(tick) << "," << py_ref(tick) + 0.129425 << "," << XD(0) << "," << YD(0) + 0.127070935 << std::endl;
+  }
+  else if((int)current_step_num_ % 2 == 1)
+  {
+    Com_tra_graph << xs(0) << "," << ys(0) - 0.127070935 << "," << px  << "," << py(0) - 0.129425  << "," << px_ref(tick) << "," << py_ref(tick) - 0.129425 << "," << XD(0) << "," << YD(0) - 0.127070935 << std::endl;
+  }
   
   double sum_Gd_px_ref = 0, sum_Gd_py_ref = 0;
 
@@ -2328,12 +2485,14 @@ void WalkingController::preview_MJ(double dt, int NL, int tick, double x_i, doub
 void WalkingController::compensator()
 {
   if(hip_compensator_mode_ == true)
-  {
+  { 
+    /*
     hipCompensation(); 
     if(lqr_compensator_mode_ == false)
     { 
       hipCompensator();
-    }
+    }*/
+    hipCompensator();
   }
 
   if(lqr_compensator_mode_ == true)
@@ -2355,8 +2514,6 @@ void WalkingController::compensator()
     slowcalc_mutex_.unlock();
     
     vibrationControl_MJ(d_q,lqr_joint_input);
-    
-    //LQR_q_tra_graph << desired_q_(0) << "," << desired_q_(1) << "," << desired_q_(2) << "," << desired_q_(3) << "," << desired_q_(4) << "," << desired_q_(5) << "," << DOB_IK_output_(0) << "," << DOB_IK_output_(1) << "," << DOB_IK_output_(2) << "," << DOB_IK_output_(3) << "," << DOB_IK_output_(4) << "," << DOB_IK_output_(5) << std::endl;
     
     double grav_gain_timing = 1.0;
     if(foot_step_(current_step_num_,6) == 1) // left foot support (right foot gain)
@@ -2413,7 +2570,7 @@ void WalkingController::compensator()
 
 void WalkingController::hipCompensator()
 {
-  double left_hip_angle = 4.0*DEG2RAD, right_hip_angle = 8.5*DEG2RAD, left_hip_angle_first_step = 4.0*DEG2RAD, right_hip_angle_first_step = 8.5*DEG2RAD,
+  double left_hip_angle = 3.3*DEG2RAD, right_hip_angle = 3.3*DEG2RAD, left_hip_angle_first_step = 3.3*DEG2RAD, right_hip_angle_first_step = 3.3*DEG2RAD,
 
       left_hip_angle_temp = 0.0, right_hip_angle_temp = 0.0, temp_time = 0.1*hz_, left_pitch_angle = 0.0*DEG2RAD;
 
@@ -2475,6 +2632,7 @@ void WalkingController::hipCompensator()
   joint_offset_angle_(1) = left_hip_angle_temp;
   joint_offset_angle_(7) = -right_hip_angle_temp;
 }
+
 void WalkingController::hipCompensation()
 {
   double a_total, b_total, alpha_l, alpha_r, rq0, rq1, rq2, rq3, rq4, rq5, lq0, lq1, lq2, lq3, lq4, lq5, robotweight, fromright, fromleft, alpha, alpha_1, f_r, f_l; //alpha is weighting factor
@@ -2620,8 +2778,8 @@ void WalkingController::vibrationControl_MJ(const Eigen::Vector12d desired_leg_q
   d_hat = 0.7*d_hat_b + 0.3*d_hat; // 필터링
 
   // Mingon's LQR contorller gain (using external encoder)
-  double default_gain = 0.2; // Kp가 정확하다면 시뮬레이션이나 실제 로봇이나 0.2~1의 의미는 같다.
-  double compliant_gain = 1;
+  double default_gain = 0; // Kp가 정확하다면 시뮬레이션이나 실제 로봇이나 0.2~1의 의미는 같다.
+  double compliant_gain = 1.0;
   double compliant_tick = 0.1*hz_;
   double gain_temp;
   for (int i = 0; i < 12; i ++)
@@ -2847,9 +3005,10 @@ void WalkingController::massSpringMotorModel(double spring_k, double damping_d, 
     motor_k_mat(i, i) = motor_k; // Kp = 10 
   }
   // knee joint
-  motor_k_mat(3,3) = 70; //18.0; // 기존 코드 18
-  motor_k_mat(9,9) = 70; //18.0;
-
+  //motor_k_mat(3,3) = 20; //18.0; // 기존 코드 18
+  //motor_k_mat(9,9) = 20; //18.0;
+  motor_k_mat(5,5) = 20;
+  motor_k_mat(11,11) = 20;
   Eigen::Matrix12d inv_mass;
   inv_mass = mass;
 
@@ -3077,7 +3236,7 @@ void WalkingController::slowCalcContent()
 
   double spring_k = 2000.0;
   double damping_d = 100.0;
-  double motor_k = 70; // 기존 코드 10 
+  double motor_k = 30; // 기존 코드 10 
   massSpringMotorModel(spring_k, damping_d, motor_k, mass_matrix_sel_, a_right_mat_, b_right_mat_, c_right_mat_);
   discreteModel(a_right_mat_, b_right_mat_, c_right_mat_, 0, 1.0/hz_, a_disc_, b_disc_, c_right_mat_, a_disc_total_, b_disc_total_);
 
@@ -3266,6 +3425,7 @@ Eigen::MatrixXd WalkingController::discreteRiccatiEquationLQR(Eigen::MatrixXd A,
 
   return X_sol;
 }
+
 
 Eigen::MatrixXd WalkingController::discreteRiccatiEquationPrev(Eigen::MatrixXd a, Eigen::MatrixXd b, Eigen::MatrixXd r, Eigen::MatrixXd q)
 {
