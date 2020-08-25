@@ -56,10 +56,11 @@ public:
   {
     walking_state_send = false;
     walking_end_ = false;
-    for(int i=0; i<FILE_CNT;i++)
+    /*for(int i=0; i<FILE_CNT;i++)
     {
       file[i].open(FILE_NAMES[i].c_str(),ios_base::out);
     }
+    
     file[0]<<"walking_tick_"<<"\t"<<"current_step_num_"<<"\t"<<"zmp_desired_(0)"<<"\t"<<"zmp_desired_(1)"<<"\t"<<"foot_step_(current_step_num_, 0)"<<"\t"<<"foot_step_(current_step_num_, 1)"<<"\t"<<"foot_step_support_frame_(current_step_num_, 0)"<<"\t"<<"foot_step_support_frame_(current_step_num_, 1)"<<"\t"<<"foot_step_support_frame_(current_step_num_, 2)"<<endl;
     file[1]<<"walking_tick_"<<"\t"<<"current_step_num_"<<"\t"<<"com_desired_(0)"<<"\t"<<"com_desired_(1)"<<"\t"<<"com_desired_(2)"<<"\t"<<"com_dot_desired_(0)"<<"\t"<<"com_dot_desired_(1)"<<"\t"<<"com_dot_desired_(2)"<<"\t"<<"com_support_init_(0)"<<"\t"<<"com_support_init_(0)"<<"\t"<<"com_support_init_(0)"<<endl;
     file[2]<<"walking_tick_"<<"\t"<<"current_step_num_"<<"\t"<<"desired_leg_q_(0)"<<"\t"<<"desired_leg_q_(1)"<<"\t"<<"desired_leg_q_(2)"<<"\t"<<"desired_leg_q_(3)"<<"\t"<<"desired_leg_q_(4)"<<"\t"<<"desired_leg_q_(5)"<<"\t"<<"desired_leg_q_(6)"<<"\t"<<"desired_leg_q_(7)"<<"\t"<<"desired_leg_q_(8)"<<"\t"<<"desired_leg_q_(9)"<<"\t"<<"desired_leg_q_(10)"<<"\t"<<"desired_leg_q_(11)"<<endl;
@@ -79,16 +80,8 @@ public:
     file[12]<<"walking_tick_"<<"\t"<<"X_hat_post_1_(0)"<<"\t"<<"X_hat_post_1_(1)"<<"\t"<<"X_hat_post_1_(2)"<<"\t"<<"X_hat_post_1_(3)"<<"\t"<<"X_hat_post_1_(4)"<<"\t"<<"X_hat_post_1_(5)"<<endl;
     file[13]<<"walking_tick_"<<"\t"<<"X_hat_post_3_(0)"<<"\t"<<"X_hat_post_3_(1)"<<"\t"<<"X_hat_post_3_(2)"<<"\t"<<"X_hat_post_3_(3)"<<"\t"<<"X_hat_post_3_(4)"<<"\t"<<"X_hat_post_3_(5)"<<endl;
     file[14]<<"walking_tick_"<<"\t"<<"grav_ground_torque_(0)"<<"\t"<<"grav_ground_torque_(1)"<<"\t"<<"grav_ground_torque_(2)"<<"\t"<<"grav_ground_torque_(3)"<<"\t"<<"grav_ground_torque_(4)"<<"\t"<<"grav_ground_torque_(5)"<<endl;
-
-  }
-  //WalkingController::~WalkingController()
-  //{
-  //  for(int i=0; i<FILE_CNT;i++)
-  //  {
-  //    if(file[i].is_open())
-  //      file[i].close();
-  //  }
-  //}
+    */
+  } 
 
   void compute();
   void setTarget(int walk_mode, bool hip_compensation, bool lqr, int ik_mode, bool heel_toe,
@@ -113,13 +106,14 @@ public:
   void supportToFloatPattern();
   void updateNextStepTime();
   void updateInitialState();
-
+  void updateInitialState2();
   //functions for getFootStep()
   void floatToSupportFootstep();
   void addZmpOffset();
   void zmpGenerator(const unsigned int norm_size, const unsigned planning_step_num);
   void onestepZmp(unsigned int current_step_number, Eigen::VectorXd& temp_px, Eigen::VectorXd& temp_py);
   void modified_zmp_trajectory_update(Eigen::Vector3d& LFoot_desired,Eigen::Vector3d& RFoot_desired,Eigen::MatrixXd& Ref_ZMP, Eigen::MatrixXd& modified_Ref_ZMP);
+  void modified_zmp_trajectory_update_MJ(int Preview_step, int tick, double Zmp_start_point_X, double Zmp_start_point_Y, Eigen::MatrixXd& modified_Ref_ZMP);
   void onestepZmp_MJ(unsigned int current_step_number, Eigen::VectorXd& temp_px, Eigen::VectorXd& temp_py);
   void OfflineCoM_MJ(unsigned int current_step_number, Eigen::VectorXd& temp_cx, Eigen::VectorXd& temp_cy);
   void calculateFootStepSeparate();
@@ -143,7 +137,7 @@ public:
   
   void preview_MJ_CPM(double dt, int NL, int tick, double x_i, double y_i, Eigen::Vector3d xs, Eigen::Vector3d ys, double& UX, double& UY, 
        Eigen::MatrixXd Gi, Eigen::VectorXd Gd, Eigen::MatrixXd Gx, Eigen::MatrixXd A, Eigen::VectorXd B, Eigen::MatrixXd A_bar, Eigen::VectorXd B_bar, Eigen::Vector2d &XD, Eigen::Vector2d &YD, Eigen::VectorXd& X_bar_p, Eigen::VectorXd& Y_bar_p);
-  
+   
   void previewParam_MJ_CPM(double dt, int NL, Eigen::Matrix3d& K, Eigen::Vector3d com_support_init_, Eigen::MatrixXd& Gi, Eigen::VectorXd& Gd, Eigen::MatrixXd& Gx, 
   Eigen::MatrixXd& A, Eigen::VectorXd& B, Eigen::MatrixXd& C, Eigen::MatrixXd& D, Eigen::MatrixXd& A_bar, Eigen::VectorXd& B_bar);
 
@@ -152,7 +146,10 @@ public:
   
   void previewParam_MJ(double dt, int NL, Eigen::Matrix4d& K, Eigen::Vector3d com_support_init_, Eigen::MatrixXd& Gi, Eigen::VectorXd& Gd, Eigen::MatrixXd& Gx, 
   Eigen::MatrixXd& A, Eigen::VectorXd& B, Eigen::MatrixXd& C, Eigen::MatrixXd& D, Eigen::MatrixXd& A_bar, Eigen::VectorXd& B_bar);
-                               
+
+
+  void Ankle_ori_controller(int tick, double py_ref_);
+
   //LQR && External Encoder
   void vibrationControl(const Eigen::Vector12d desired_leg_q, Eigen::Vector12d &output);
   void vibrationControl_MJ(const Eigen::Vector12d desired_leg_q, Eigen::Vector12d &output);
@@ -225,13 +222,15 @@ private:
   unsigned int walking_tick_ = 0;
   unsigned int com_tick_ = 0;
   double walking_time_ = 0;
-
+  unsigned int tick_d1 = 0, tick_d2 = 0;
   //sensorData
   Eigen::Vector6d r_ft_;
   Eigen::Vector6d l_ft_;
   Eigen::Vector3d imu_acc_;
   Eigen::Vector3d imu_ang_;
   Eigen::Vector3d imu_grav_rpy_;
+
+  double total_mass = 0;
 
   //parameterSetting()
   double t_last_;
@@ -287,6 +286,7 @@ private:
 
   Eigen::MatrixXd org_ref_zmp_;
   Eigen::MatrixXd ref_zmp_;
+  Eigen::MatrixXd modified_ref_zmp_;
   Eigen::MatrixXd ref_com_;
   Eigen::MatrixXd ref_zmp_float_;
 
@@ -305,6 +305,7 @@ private:
   double end_time_[DyrosJetModel::HW_TOTAL_DOF];
 
   //Step initial state variable//
+  Eigen::Isometry3d pelv_support_init_2;
   Eigen::Isometry3d pelv_support_init_;
   Eigen::Isometry3d lfoot_support_init_;
   Eigen::Isometry3d rfoot_support_init_;
@@ -328,20 +329,22 @@ private:
 
   Eigen::Vector3d com_float_init_;
   Eigen::Vector3d com_support_init_;
-
+  Eigen::Vector3d com_support_init_2;
   double lfoot_zmp_offset_;   //have to be initialized
   double rfoot_zmp_offset_;
   Eigen::Vector3d com_offset_;
 
   //Step current state variable//
-
+  Eigen::Vector3d com_support_current_CLIPM_Euler;
+  Eigen::Vector3d com_support_current_CLIPM_b;
+  Eigen::Vector3d com_support_current_CLIPM;
   Eigen::Vector3d com_support_current_b;
   Eigen::Vector3d com_support_current_dot;
   Eigen::Vector3d com_support_current_;
+  Eigen::Vector3d com_support_current_Euler;
   Eigen::Vector3d com_middle_support_current_;
   Eigen::Vector3d com_support_dot_current_;//from support foot
-  Eigen::Vector3d com_support_ddot_current_;//from support foot
-  Eigen::Isometry3d com_support_current_MJ;
+  Eigen::Vector3d com_support_ddot_current_;//from support foot 
 
   ///simulation
   Eigen::Vector3d com_sim_current_;
@@ -355,18 +358,27 @@ private:
 
   Eigen::Vector3d gyro_sim_current_;
   Eigen::Vector3d accel_sim_current_;
-
+  
+  Eigen::Isometry3d supportfoot_float_current_Euler;
   Eigen::Isometry3d supportfoot_float_current_;
+  Eigen::Isometry3d pelv_support_current_Euler;
   Eigen::Isometry3d pelv_support_current_;
   Eigen::Isometry3d lfoot_support_current_;
   Eigen::Isometry3d rfoot_support_current_;
+  Eigen::Isometry3d lfoot_support_current_ZMP;
+  Eigen::Isometry3d rfoot_support_current_ZMP;
 
   Eigen::Vector3d com_float_current_;
+  Eigen::Vector3d com_float_current_RPY;
+  Eigen::Vector3d com_float_current_Euler;
   Eigen::Vector3d com_float_current_dot_;
   Eigen::Isometry3d pelv_float_current_;
   Eigen::Isometry3d lfoot_float_current_;
   Eigen::Isometry3d rfoot_float_current_;
-
+  Eigen::Isometry3d lfoot_float_current_Euler;
+  Eigen::Isometry3d rfoot_float_current_Euler;
+  Eigen::Isometry3d R_;
+  Eigen::Matrix3d R;
   
   Eigen::Matrix6d current_leg_jacobian_l_;
   Eigen::Matrix6d current_leg_jacobian_r_;
@@ -382,7 +394,9 @@ private:
   Eigen::Vector3d com_desired_;
   Eigen::Vector3d com_dot_desired_;
   Eigen::Vector2d zmp_desired_;
-
+  // 수업용
+  Eigen::Vector3d com_desired_dot_, com_desired_ddot_ , com_desired_dot_b_;
+  //
   Eigen::Isometry3d rfoot_trajectory_support_;  //local frame
   Eigen::Isometry3d lfoot_trajectory_support_;
   Eigen::Vector3d rfoot_trajectory_euler_support_;
@@ -421,7 +435,8 @@ private:
   Eigen::Matrix3d a_;
   Eigen::Vector3d b_;
   Eigen::Matrix1x3d c_;
-  //Preview CPM
+
+  //Preview CLIPM MJ
   Eigen::MatrixXd A_;
   Eigen::VectorXd B_;
   Eigen::MatrixXd C_;
@@ -436,8 +451,29 @@ private:
   Eigen::VectorXd X_bar_p_, Y_bar_p_;
   Eigen::Vector2d XD_;
   Eigen::Vector2d YD_;
-  double UX_, UY_;
+  double UX_, UY_; 
 
+  //CP Feedback MJ
+  double R_angle = 0, P_angle = 0;
+  double cp_err_x = 0, cp_err_y = 0; 
+  double cp_err_x_i = 0, cp_err_y_i = 0;
+  double del_px_cp = 0, del_py_cp = 0; 
+
+  double x_cp_ref = 0, y_cp_ref = 0; 
+  double x_cp_act = 0, y_cp_act = 0; 
+  double Wn;  
+  
+  // 속도 구할때
+  double XD_b = 0, YD_b = 0, XD_bb = 0, YD_bb = 0;
+  double X_b = 0, Y_b = 0, X_bb = 0, Y_bb = 0;
+  double XD_vel = 0, YD_vel = 0, XD_vel_b = 0, YD_vel_b = 0;
+  double XA_vel = 0, YA_vel = 0, XA_vel_b = 0, YA_vel_b = 0;
+  // ZMP Controller_MJ
+
+  double px_act = 0, py_act = 0; 
+  double px_err = 0, x_ddot_des = 0, x_dot_des = 0, x_des = 0, x_des_support = 0;
+  double py_err = 0, y_ddot_des = 0, y_dot_des = 0, y_des = 0, y_des_support = 0;
+  // 
 
   //resolved momentum control
   Eigen::Vector3d p_ref_;

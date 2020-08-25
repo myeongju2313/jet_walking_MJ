@@ -250,7 +250,7 @@ void ControlBase::taskCommandCallback(const dyros_jet_msgs::TaskCommandConstPtr&
 
       if(msg->mode[i] == dyros_jet_msgs::TaskCommand::RELATIVE)
       {
-        const auto &current =  model_.getCurrentTrasmfrom((DyrosJetModel::EndEffector)i);
+        const auto &current =  model_.getCurrentTransform((DyrosJetModel::EndEffector)i);
         target.translation() = target.translation() + current.translation();
         target.linear() = current.linear() * target.linear();
       }
@@ -271,13 +271,13 @@ void ControlBase::hapticCommandCallback(const dyros_jet_msgs::TaskCommandConstPt
 
       if(msg->mode[i] == dyros_jet_msgs::TaskCommand::ABSOLUTE)
       {
-        const auto &current =  model_.getCurrentTrasmfrom((DyrosJetModel::EndEffector)i);
+        const auto &current =  model_.getCurrentTransform((DyrosJetModel::EndEffector)i);
         target.translation() = target.translation() + current.translation();
         target.linear() = current.linear() * target.linear();
       }
       if(msg->mode[i] == dyros_jet_msgs::TaskCommand::RELATIVE)
       {
-        const auto &current =  model_.getCurrentTrasmfrom((DyrosJetModel::EndEffector)i);
+        const auto &current =  model_.getCurrentTransform((DyrosJetModel::EndEffector)i);
         target.translation() = current.linear()*target.translation() + current.translation();
         target.linear() = current.linear() * target.linear();
       }

@@ -85,7 +85,7 @@ public:
 
 
   const Eigen::Vector12d& getCurrentExtencoder(){ return q_ext_; }
-  const Eigen::Isometry3d& getCurrentTrasmfrom(EndEffector ee) { return currnet_transform_[ee]; }
+  const Eigen::Isometry3d& getCurrentTransform(EndEffector ee) { return currnet_transform_[ee]; }
   const Eigen::Matrix<double, 6, 6>& getLegJacobian(EndEffector ee) { return leg_jacobian_[ee]; }
   const Eigen::Matrix<double, 6, 7>& getArmJacobian(EndEffector ee) { return arm_jacobian_[ee-2]; }
   const Eigen::Matrix<double, 6, 18>& getLegWithVLinkJacobian(EndEffector ee) { return leg_with_vlink_jacobian_[ee]; }
