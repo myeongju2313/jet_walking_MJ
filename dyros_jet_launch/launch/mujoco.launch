@@ -1,7 +1,7 @@
 <launch>
   <node name="mujoco_ros" pkg="mujoco_ros" type="mujoco_ros" required="true" respawn="false" output="screen">
    <param name="license" type="string" value="$(env HOME)/mjkey.txt" />
-   <param name="model_file" type="string" value="$(find dyros_jet_description)/robots/dyros_jet_robot_hw_2.xml"/>
+   <param name="model_file" type="string" value="$(find dyros_jet_description)/robots/dyros_jet_robot_hw.xml"/>
   </node>
   <include file="$(find dyros_jet_launch)/launch/common.launch">
     <arg name="run_mode" value="mujoco" />
