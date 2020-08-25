@@ -200,7 +200,6 @@ void WalkingController::calculateFootStepTotal()
     middle_total_step_number = 5;
     dlength = 0;
   }
-  ////// 목표 x, y 변위, 설정된 step length를 이용해서 middle_total_step number를 구함.
   
   unsigned int number_of_foot_step;
 
