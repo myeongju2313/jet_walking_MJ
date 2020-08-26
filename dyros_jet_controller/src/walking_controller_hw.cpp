@@ -34,7 +34,7 @@ void WalkingController::compute()
 
           
         for(int i=0; i<12; i++)
-        { desired_q_(i) = q_des(i); }
+        { desired_q_(i) = current_q_(i); }
         desired_q_not_compensated_ = desired_q_ ;  
         
         updateNextStepTime();        
@@ -256,7 +256,7 @@ void WalkingController::calculateFootStepTotal()
     is_right = -1;
 
 
-  temp = -is_right; /
+  temp = -is_right; 
   temp2 = -is_right;
   temp3 = -is_right;
 
