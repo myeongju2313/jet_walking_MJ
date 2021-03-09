@@ -55,12 +55,12 @@ file(GLOB BRIDGE_SRC
     #  "src/hardware_interface.cpp"
     )
 file(GLOB WALKING_SRC
-    "src/walking_controller_hw.cpp"
+    "src/walking_controller.cpp"
     "src/state_estimator.cpp"
     )
 file(GLOB CONTROLLER_SRC
     "src/dyros_jet_model.cpp"
-    "src/walking_controller_hw.cpp"
+    "src/walking_controller.cpp"
     "src/task_controller.cpp"
     "src/haptic_controller.cpp"
     "src/joint_controller.cpp"

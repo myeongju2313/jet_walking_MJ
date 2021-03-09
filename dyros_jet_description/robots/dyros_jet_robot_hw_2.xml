@@ -27,7 +27,7 @@
 
     <default>
         <default class="object1">
-                 <geom type="box" size=".1 .1 0.012" rgba="1 .4 .4 1"  />
+                 <geom type="box" size=".1 .1 0.007" rgba="1 .4 .4 1"  />
         </default>
 
         <default class="object3">
@@ -43,7 +43,7 @@
         </default>
 
         <default class="object5">
-                 <geom type="box" size="1 1 .05" rgba=".1 .1 .1 1" />
+                 <geom type="box" size="1 1 .05" rgba=".2 .4 .6 1" />
         </default>
     </default>
 
@@ -270,20 +270,37 @@
 
         <body pos="0 0 0" quat="1 0 0 0">
             <freejoint/>
-            <geom class="object1" pos="-0.3 -0.4 0" quat="1 0 0 0" mass="0.5"/>
+            <geom class="object1" pos="-0.2 0.0 -0.1" quat="1 0 0 0" mass="500"/>
         </body>
 
+        <body pos="0 0 0" quat="1 0 0 0">
+            <freejoint/>
+            <geom class="object3" pos="0.44 -0.4 0" quat="1 0 0 0" mass="0.5"/>
+        </body>
 
+        <body pos="0 0 0" quat="1 0 0 0"> 
+            <freejoint/>
+            <geom class="object4" pos="+0.8 0.45 0" quat="1 0 0 0" mass="0.5"/>
+        </body>
+
+        <body>            
+            <geom class="object2" pos="2.5 -0.4 1.25" quat="1 0 0 0"/> 
+            <joint type="slide" pos="1 0 1" axis="0 1 0" springdamper="0.15 0.4"/>
+        </body>
+
+        <body pos="0 0 0" quat="1 0 0 0">
+            <geom class="object5" pos="2 0 0" quat="1 0 -0.026 0"/>
+        </body>
         
 
 
     </worldbody>
 	<actuator>		
 		<position class="position" ctrllimited="true" ctrlrange="-5 5"  name="L_HipYaw" joint="L_HipYaw" kp = "3500"/> 
-                <position class="position" ctrllimited="false"  name="L_HipRoll" joint="L_HipRoll" kp = "3000"/> 
+                <position class="position" ctrllimited="false"  name="L_HipRoll" joint="L_HipRoll" kp = "3000"/>
 		<position class="position" ctrllimited="true" ctrlrange="-5 5"  name="L_HipPitch" joint="L_HipPitch" kp = "3000"/> 
 	        <position class="position" ctrllimited="false"   name="L_KneePitch" joint="L_KneePitch" kp = "3000"/> 
-		<position class="position" ctrllimited="true" ctrlrange="-5 5"  name="L_AnklePitch" joint="L_AnklePitch" kp = "3000"/> 
+		<position class="position" ctrllimited="true" ctrlrange="-5 5"  name="L_AnklePitch" joint="L_AnklePitch" kp = "3000"/>
                 <position class="position" ctrllimited="true" ctrlrange="-5 5"  name="L_AnkleRoll" joint="L_AnkleRoll" kp = "3000"/> 
 					
 		<position class="position" ctrllimited="true" ctrlrange="-5 5"  name="R_HipYaw" joint="R_HipYaw" kp = "3500"/>
@@ -293,8 +310,8 @@
 		<position class="position" ctrllimited="true" ctrlrange="-5 5"  name="R_AnklePitch" joint="R_AnklePitch" kp = "3000"/>
                 <position class="position" ctrllimited="true" ctrlrange="-5 5"  name="R_AnkleRoll" joint="R_AnkleRoll" kp = "3000"/>
 
-                <position class="position" ctrllimited="true" ctrlrange="-3 3"  name="WaistPitch" joint="WaistPitch" kp = "35000"/>
-                <position class="position" ctrllimited="true" ctrlrange="-3 3"  name="WaistYaw" joint="WaistYaw" kp = "35000"/>
+                <position class="position" ctrllimited="true" ctrlrange="-3 3"  name="WaistPitch" joint="WaistPitch" kp = "15000"/>
+                <position class="position" ctrllimited="true" ctrlrange="-3 3"  name="WaistYaw" joint="WaistYaw" kp = "15000"/>
 
                 <position class="position" ctrllimited="true" ctrlrange="-3 3" name="L_ShoulderPitch" joint="L_ShoulderPitch" kp = "10000"/>
                 <position class="position" ctrllimited="true" ctrlrange="-3 3"  name="L_ShoulderRoll" joint="L_ShoulderRoll" kp = "10000"/>
@@ -338,7 +355,10 @@
 				     0 0 
 				     0.6981317008 -1.6580627893  -1.3962634016  -1.9198621771  0  -1.2217304764  -0.1745329252 
 				     -0.6981317008  1.6580627893  1.3962634016  1.9198621771  0  1.2217304764  0.17453292519 
-                     0.3 0.0 0.05 1 0 0 0"/>
+                     0.3 0.0 0.05 1 0 0 0
+                     0.3 0.0 0.05 1 0 0 0
+                     0.3 0.0 0.05 1 0 0 0 
+                     0"/>
         </keyframe>
 	
 

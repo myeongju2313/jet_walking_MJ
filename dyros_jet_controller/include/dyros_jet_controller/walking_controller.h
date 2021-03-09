@@ -19,22 +19,7 @@ const int FILE_CNT = 15;
 const std::string FILE_NAMES[FILE_CNT] =
 {
   ///change this directory when you use this code on the other computer///
-
-  "/home/myeongju/data/walking/0_desired_zmp_.txt",
-  "/home/myeongju/data/walking/1_desired_com_.txt",
-  "/home/myeongju/data/walking/2_desired_q_.txt",
-  "/home/myeongju/data/walking/3_real_q_.txt",
-  "/home/myeongju/data/walking/4_desired_swingfoot_.txt",
-  "/home/myeongju/data/walking/5_desired_pelvis_trajectory_.txt",
-  "/home/myeongju/data/walking/6_current_com_pelvis_trajectory_.txt",
-  "/home/myeongju/data/walking/7_current_foot_trajectory_.txt",
-  "/home/myeongju/data/walking/8_QPestimation_variables_.txt",
-  "/home/myeongju/data/walking/9_ft_sensor_.txt",
-  "/home/myeongju/data/walking/10_ext_encoder_.txt",
-  "/home/myeongju/data/walking/11_kalman_estimator2_.txt",
-  "/home/myeongju/data/walking/12_kalman_estimator1_.txt",
-  "/home/myeongju/data/walking/13_kalman_estimator3_.txt",
-  "/home/myeongju/data/walking/14_grav_torque_.txt"
+ 
 
 };
 
@@ -56,31 +41,7 @@ public:
   {
     walking_state_send = false;
     walking_end_ = false;
-    /*for(int i=0; i<FILE_CNT;i++)
-    {
-      file[i].open(FILE_NAMES[i].c_str(),ios_base::out);
-    }
-    
-    file[0]<<"walking_tick_"<<"\t"<<"current_step_num_"<<"\t"<<"zmp_desired_(0)"<<"\t"<<"zmp_desired_(1)"<<"\t"<<"foot_step_(current_step_num_, 0)"<<"\t"<<"foot_step_(current_step_num_, 1)"<<"\t"<<"foot_step_support_frame_(current_step_num_, 0)"<<"\t"<<"foot_step_support_frame_(current_step_num_, 1)"<<"\t"<<"foot_step_support_frame_(current_step_num_, 2)"<<endl;
-    file[1]<<"walking_tick_"<<"\t"<<"current_step_num_"<<"\t"<<"com_desired_(0)"<<"\t"<<"com_desired_(1)"<<"\t"<<"com_desired_(2)"<<"\t"<<"com_dot_desired_(0)"<<"\t"<<"com_dot_desired_(1)"<<"\t"<<"com_dot_desired_(2)"<<"\t"<<"com_support_init_(0)"<<"\t"<<"com_support_init_(0)"<<"\t"<<"com_support_init_(0)"<<endl;
-    file[2]<<"walking_tick_"<<"\t"<<"current_step_num_"<<"\t"<<"desired_leg_q_(0)"<<"\t"<<"desired_leg_q_(1)"<<"\t"<<"desired_leg_q_(2)"<<"\t"<<"desired_leg_q_(3)"<<"\t"<<"desired_leg_q_(4)"<<"\t"<<"desired_leg_q_(5)"<<"\t"<<"desired_leg_q_(6)"<<"\t"<<"desired_leg_q_(7)"<<"\t"<<"desired_leg_q_(8)"<<"\t"<<"desired_leg_q_(9)"<<"\t"<<"desired_leg_q_(10)"<<"\t"<<"desired_leg_q_(11)"<<endl;
-    file[3]<<"walking_tick_"<<"\t"<<"current_step_num_"<<"\t"<<"current_q_(0)"<<"\t"<<"current_q_(1)"<<"\t"<<"current_q_(2)"<<"\t"<<"current_q_(3)"<<"\t"<<"current_q_(4)"<<"\t"<<"current_q_(5)"<<"\t"<<"current_q_(6)"<<"\t"<<"current_q_(7)"<<"\t"<<"current_q_(8)"<<"\t"<<"current_q_(9)"<<"\t"<<"current_q_(10)"<<"\t"<<"current_q_(11)"<<endl;
-    file[4]<<"walking_tick_"<<"\t"<<"current_step_num_"<<"\t"<<"rfoot_trajectory_support_.translation()(0)"<<"\t"<<"rfoot_trajectory_support_.translation()(1)"<<"\t"<<"rfoot_trajectory_support_.translation()(2)"<<"\t"<<"lfoot_trajectory_support_.translation()(0)"<<"\t"<<"lfoot_trajectory_support_.translation()(1)"<<"\t"<<"lfoot_trajectory_support_.translation()(2)"<<"\t"<<"rfoot_support_init_.translation()(0)"<<"\t"<<"rfoot_support_init_.translation()(1)"<<"\t"<<"rfoot_support_init_.translation()(2)"<<endl;
-    file[5]<<"walking_tick_"<<"\t"<<"current_step_num_"<<"\t"<<"pelv_trajectory_support_.translation()(0)"<<"\t"<<"pelv_trajectory_support_.translation()(1)"<<"\t"<<"pelv_trajectory_support_.translation()(2)"<<endl;
-    file[6]<<"walking_tick_"<<"\t"<<"current_step_num_"<<"\t"<<"com_support_current_(0)"<<"\t"<<"com_support_current_(1)"<<"\t"<<"com_support_current_(2)"
-          <<"\t"<<"pelv_support_current_.translation()(0)"<<"\t"<<"pelv_support_current_.translation()(1)"<<"\t"<<"pelv_support_current_.translation()(2)"<<"\t"<<"com_support_dot_current_(0)"<<"\t"<<"com_support_dot_current_(1)"<<"\t"<<"com_support_dot_current_(2)"
-         <<"\t"<<"com_sim_current_(0)"<<"\t"<<"com_sim_current_(1)"<<"\t"<<"com_sim_current_(2)"<<"\t"<<"com_sim_dot_current_(0)"<<"\t"<<"com_sim_dot_current_(1)"<<"\t"<<"com_sim_dot_current_(2)"<<endl;
-    file[7]<<"walking_tick_"<<"\t"<<"current_step_num_"<<"\t"<<"rfoot_support_current_.translation()(0)"<<"\t"<<"rfoot_support_current_.translation()(1)"<<"\t"<<"rfoot_support_current_.translation()(2)"
-          <<"\t"<<"lfoot_support_current_.translation()(0)"<<"\t"<<"lfoot_support_current_.translation()(1)"<<"\t"<<"lfoot_support_current_.translation()(2)"<<endl;
-    file[8]<<"walking_tick_"<<"\t"<<"current_step_num_"<<"\t"<<"vars.x[0]"<<"\t"<<"vars.x[1]"<<"\t"<<"vars.x[2]"<<"\t"<<"vars.x[3]"<<"\t"<<"vars.x[4]"<<"\t"<<"vars.x[5]"<<"\t"<<"zmp_measured_(0)"<<"\t"<<"zmp_measured_(1)"<<"\t"<<"zmp_r_(0)"<<"\t"<<"zmp_r_(1)"<<"\t"<<"zmp_l_(0)"<<"\t"<<"zmp_l_(1)"<<endl;
-    file[9]<<"walking_tick_"<<"\t"<<"current_step_num_"<<"\t"<<"r_ft_(0)"<<"\t"<<"r_ft_(1)"<<"\t"<<"r_ft_(2)"<<"\t"<<"r_ft_(3)"<<"\t"<<"r_ft_(4)"<<"\t"<<"r_ft_(5)"<<"\t"<<"l_ft_(0)"<<"\t"<<"l_ft_(1)"<<"\t"<<"l_ft_(2)"<<"\t"<<"l_ft_(3)"<<"\t"<<"l_ft_(4)"<<"\t"<<"l_ft_(5)"<<endl;
-    file[10]<<"walking_tick_"<<"\t"<<"current_step_num_"<<"\t"<<"current_link_q_leg_(0)"<<"\t"<<"current_link_q_leg_(1)"<<"\t"<<"current_link_q_leg_(2)"<<"\t"<<"current_link_q_leg_(3)"<<"\t"<<"current_link_q_leg_(4)"<<"\t"<<"current_link_q_leg_(5)"<<"\t"<<
-              "current_link_q_leg_(6)"<<"\t"<<"current_link_q_leg_(7)"<<"\t"<<"current_link_q_leg_(8)"<<"\t"<<"current_link_q_leg_(9)"<<"\t"<<"current_link_q_leg_(10)"<<"\t"<<"current_link_q_leg_(11)"<<endl;
-    file[11]<<"walking_tick_"<<"\t"<<"X_hat_post_2_(0)"<<"\t"<<"X_hat_post_2_(1)"<<"\t"<<"X_hat_post_2_(2)"<<"\t"<<"X_hat_post_2_(3)"<<"\t"<<"X_hat_post_2_(4)"<<"\t"<<"X_hat_post_2_(5)"<<"\t"<<"X_hat_post_2_(6)"<<"\t"<<"X_hat_post_2_(7)"<<endl;
-    file[12]<<"walking_tick_"<<"\t"<<"X_hat_post_1_(0)"<<"\t"<<"X_hat_post_1_(1)"<<"\t"<<"X_hat_post_1_(2)"<<"\t"<<"X_hat_post_1_(3)"<<"\t"<<"X_hat_post_1_(4)"<<"\t"<<"X_hat_post_1_(5)"<<endl;
-    file[13]<<"walking_tick_"<<"\t"<<"X_hat_post_3_(0)"<<"\t"<<"X_hat_post_3_(1)"<<"\t"<<"X_hat_post_3_(2)"<<"\t"<<"X_hat_post_3_(3)"<<"\t"<<"X_hat_post_3_(4)"<<"\t"<<"X_hat_post_3_(5)"<<endl;
-    file[14]<<"walking_tick_"<<"\t"<<"grav_ground_torque_(0)"<<"\t"<<"grav_ground_torque_(1)"<<"\t"<<"grav_ground_torque_(2)"<<"\t"<<"grav_ground_torque_(3)"<<"\t"<<"grav_ground_torque_(4)"<<"\t"<<"grav_ground_torque_(5)"<<endl;
-    */
+
   } 
 
   void compute();
@@ -94,77 +55,67 @@ public:
 
   void parameterSetting();
   //functions in compute
+  //
+  double CP_X_ref = 0, CP_Y_ref = 0;
+  double CP_X_act = 0, CP_Y_act = 0;
+  double del_zmp_x = 0, del_zmp_y = 0;
+  double del_ux_LPF = 0, del_uy_LPF = 0;
+  void getCPTrajectory_M();
+  Eigen::Vector2d p;
+  Eigen::Vector2d cp_eos; 
+  Eigen::Vector2d cp;
+  Eigen::Vector2d cp_pre;
+  Eigen::Vector2d com;
+  Eigen::Vector2d com_dot;
+  Eigen::Vector2d com_pre;
+  Eigen::Vector2d dT, b;
+  Eigen::Vector2d cp_measured_;
+  Eigen::Vector2d p_d;
+  Eigen::Vector2d p_d_pre;
+  double zmp_x = 0;
+  double zmp_y = 0; 
+  double del_t = 0.005;
+  //
+
+  Eigen::Vector2d zmp_measured_;
+  Eigen::Vector2d zmp_measured_LPF_;
+  Eigen::Vector2d zmp_err_;
+
   void getRobotState();
-  void getComTrajectory_MJ();
+  void getComTrajectory();
   void getZmpTrajectory();
   void getPelvTrajectory();
-  void getFootTrajectory_MJ();
+  void getFootTrajectory();
   void computeIkControl_MJ(Eigen::Isometry3d float_trunk_transform, Eigen::Isometry3d float_lleg_transform, Eigen::Isometry3d float_rleg_transform, Eigen::Vector12d& desired_leg_q);
-  void computeJacobianControl(Eigen::Isometry3d float_lleg_transform, Eigen::Isometry3d float_rleg_transform, Eigen::Vector3d float_lleg_transform_euler, Eigen::Vector3d float_rleg_transform_euler, Eigen::Vector12d& desired_leg_q_dot);
   void compensator();
 
   void supportToFloatPattern();
   void updateNextStepTime();
-  void updateInitialState();
-  void updateInitialState2();
+  void updateInitialState(); 
   //functions for getFootStep()
   void floatToSupportFootstep();
   void addZmpOffset();
   void zmpGenerator(const unsigned int norm_size, const unsigned planning_step_num);
+  void comGenerator(const unsigned int norm_size, const unsigned planning_step_num);
   void onestepZmp(unsigned int current_step_number, Eigen::VectorXd& temp_px, Eigen::VectorXd& temp_py);
-  void modified_zmp_trajectory_update(Eigen::Vector3d& LFoot_desired,Eigen::Vector3d& RFoot_desired,Eigen::MatrixXd& Ref_ZMP, Eigen::MatrixXd& modified_Ref_ZMP);
-  void modified_zmp_trajectory_update_MJ(int Preview_step, int tick, double Zmp_start_point_X, double Zmp_start_point_Y, Eigen::MatrixXd& modified_Ref_ZMP);
-  void onestepZmp_MJ(unsigned int current_step_number, Eigen::VectorXd& temp_px, Eigen::VectorXd& temp_py);
+  void onestepCom(unsigned int current_step_number, Eigen::VectorXd& temp_px, Eigen::VectorXd& temp_py); 
   void OfflineCoM_MJ(unsigned int current_step_number, Eigen::VectorXd& temp_cx, Eigen::VectorXd& temp_cy);
   void calculateFootStepSeparate();
   void calculateFootStepTotal();
+  void calculateFootStepTotal_MJ();
   void usingFootStepPlanner();
+  void hip_compensator(); // HW6
+  void Compliant_control(Eigen::Vector12d desired_leg_q);
 
-  //functions in compensator()
-  void hipCompensator(); //reference Paper: http://dyros.snu.ac.kr/wp-content/uploads/2017/01/ICHR_2016_JS.pdf
-  void hipCompensation();
-
-  //PreviewController
-  void modifiedPreviewControl_MJ();
-  void previewControl(double dt, int NL, int tick, double x_i, double y_i, Eigen::Vector3d xs,
-                      Eigen::Vector3d ys, double ux_1 , double uy_1 ,
-                      double& ux, double& uy, double gi, Eigen::VectorXd gp_l,
-                      Eigen::Matrix1x3d gx, Eigen::Matrix3d a, Eigen::Vector3d b,
-                      Eigen::Matrix1x3d c, Eigen::Vector3d &xd, Eigen::Vector3d &yd);
-  void previewControlParameter(double dt, int NL, Eigen::Matrix4d& k, Eigen::Vector3d com_support_init_,
-                               double& gi, Eigen::VectorXd& gp_l, Eigen::Matrix1x3d& gx, Eigen::Matrix3d& a,
-                               Eigen::Vector3d& b, Eigen::Matrix1x3d& c);
-  
-  void preview_MJ_CPM(double dt, int NL, int tick, double x_i, double y_i, Eigen::Vector3d xs, Eigen::Vector3d ys, double& UX, double& UY, 
+  //PreviewController    
+  void previewcontroller(double dt, int NL, int tick, double x_i, double y_i, Eigen::Vector3d xs, Eigen::Vector3d ys, double& UX, double& UY, 
+       Eigen::MatrixXd Gi, Eigen::VectorXd Gd, Eigen::MatrixXd Gx, Eigen::MatrixXd A, Eigen::VectorXd B, Eigen::MatrixXd C, Eigen::Vector3d &XD, Eigen::Vector3d &YD);  
+  void preview_Parameter(double dt, int NL, Eigen::MatrixXd& Gi, Eigen::VectorXd& Gd, Eigen::MatrixXd& Gx, Eigen::MatrixXd& A, Eigen::VectorXd& B, Eigen::MatrixXd& C);
+  void preview_Parameter_CPM(double dt, int NL, Eigen::Matrix3d& K, Eigen::Vector3d com_support_init_, Eigen::MatrixXd& Gi, Eigen::VectorXd& Gd, Eigen::MatrixXd& Gx, 
+  Eigen::MatrixXd& A, Eigen::VectorXd& B, Eigen::MatrixXd& C, Eigen::MatrixXd& D, Eigen::MatrixXd& A_bar, Eigen::VectorXd& B_bar);
+  void previewcontroller_CPM(double dt, int NL, int tick, double x_i, double y_i, Eigen::Vector3d xs, Eigen::Vector3d ys, double& UX, double& UY, 
        Eigen::MatrixXd Gi, Eigen::VectorXd Gd, Eigen::MatrixXd Gx, Eigen::MatrixXd A, Eigen::VectorXd B, Eigen::MatrixXd A_bar, Eigen::VectorXd B_bar, Eigen::Vector2d &XD, Eigen::Vector2d &YD, Eigen::VectorXd& X_bar_p, Eigen::VectorXd& Y_bar_p);
-   
-  void previewParam_MJ_CPM(double dt, int NL, Eigen::Matrix3d& K, Eigen::Vector3d com_support_init_, Eigen::MatrixXd& Gi, Eigen::VectorXd& Gd, Eigen::MatrixXd& Gx, 
-  Eigen::MatrixXd& A, Eigen::VectorXd& B, Eigen::MatrixXd& C, Eigen::MatrixXd& D, Eigen::MatrixXd& A_bar, Eigen::VectorXd& B_bar);
-
-  void preview_MJ(double dt, int NL, int tick, double x_i, double y_i, Eigen::Vector3d xs, Eigen::Vector3d ys, double& UX, double& UY, 
-       Eigen::MatrixXd Gi, Eigen::VectorXd Gd, Eigen::MatrixXd Gx, Eigen::MatrixXd A, Eigen::VectorXd B, Eigen::Vector3d &XD, Eigen::Vector3d &YD);
-  
-  void previewParam_MJ(double dt, int NL, Eigen::Matrix4d& K, Eigen::Vector3d com_support_init_, Eigen::MatrixXd& Gi, Eigen::VectorXd& Gd, Eigen::MatrixXd& Gx, 
-  Eigen::MatrixXd& A, Eigen::VectorXd& B, Eigen::MatrixXd& C, Eigen::MatrixXd& D, Eigen::MatrixXd& A_bar, Eigen::VectorXd& B_bar);
-
-
-  void Ankle_ori_controller(int tick, double py_ref_);
-
-  //LQR && External Encoder
-  void vibrationControl(const Eigen::Vector12d desired_leg_q, Eigen::Vector12d &output);
-  void vibrationControl_MJ(const Eigen::Vector12d desired_leg_q, Eigen::Vector12d &output);
-  void massSpringMotorModel(double spring_k, double damping_d, double motor_k, Eigen::Matrix12d & mass, Eigen::Matrix<double, 36, 36>& a, Eigen::Matrix<double, 36, 12>& b, Eigen::Matrix<double, 12, 36>& c);
-  void discreteModel(Eigen::Matrix<double, 36, 36>& a, Eigen::Matrix<double, 36, 12>& b, Eigen::Matrix<double, 12, 36>& c, int np, double dt,
-                     Eigen::Matrix<double, 36, 36>& ad, Eigen::Matrix<double, 36, 12>& bd, Eigen::Matrix<double, 12, 36>& cd,
-                     Eigen::Matrix<double, 48, 48>& ad_total, Eigen::Matrix<double, 48, 12>& bd_total);
-  void riccatiGain(Eigen::Matrix<double, 48, 48>& ad_total, Eigen::Matrix<double, 48, 12>& bd_total, Eigen::Matrix<double, 48, 48>& q, Eigen::Matrix12d& r, Eigen::Matrix<double, 12, 48>& k);
-  void slowCalc();
-  void slowCalcContent();
-
-  
-  void discreteRiccatiEquationInitialize(Eigen::MatrixXd a, Eigen::MatrixXd b);
-  Eigen::MatrixXd discreteRiccatiEquationLQR(Eigen::MatrixXd A, Eigen::MatrixXd B, Eigen::MatrixXd R, Eigen::MatrixXd Q);
-  Eigen::MatrixXd discreteRiccatiEquationPrev(Eigen::MatrixXd a, Eigen::MatrixXd b, Eigen::MatrixXd r, Eigen::MatrixXd q);
+  void slowCalc();  
 
   VectorQd desired_q_not_compensated_;
 
@@ -173,11 +124,6 @@ public:
   bool foot_plan_walking_last_;
   bool foot_last_walking_end_;
   bool walking_state_send;
-
-
-  //ImpedanceControl
-  void impedancefootUpdate();
-  void impedanceControl();
 
   //CapturePoint
   void getCapturePointTrajectory();
@@ -256,8 +202,7 @@ private:
   int ik_mode_;
   int walk_mode_;
   bool hip_compensator_mode_;
-  bool lqr_compensator_mode_;
-  int heel_toe_mode_;
+  bool lqr_compensator_mode_; 
   int is_right_foot_swing_;
   bool foot_step_planner_mode_;
 
@@ -335,17 +280,22 @@ private:
   Eigen::Vector3d com_offset_;
 
   //Step current state variable//
-  Eigen::Vector3d com_support_current_CLIPM_Euler;
+  Eigen::Vector3d com_support_current_Euler;
   Eigen::Vector3d com_support_current_CLIPM_b;
   Eigen::Vector3d com_support_current_CLIPM;
   Eigen::Vector3d com_support_current_b;
   Eigen::Vector3d com_support_current_dot;
-  Eigen::Vector3d com_support_current_;
-  Eigen::Vector3d com_support_current_Euler;
+  Eigen::Vector3d com_support_current_; 
   Eigen::Vector3d com_middle_support_current_;
   Eigen::Vector3d com_support_dot_current_;//from support foot
-  Eigen::Vector3d com_support_ddot_current_;//from support foot 
+  Eigen::Vector3d com_support_ddot_current_;//from support foot
 
+  Eigen::Vector3d com_support_current_dot_b; 
+  Eigen::Vector3d com_support_current_dot_LPF;
+  
+  double R_angle = 0, P_angle = 0;
+  double R_angle_i = 0, P_angle_i = 0;
+  double leg_length_L = 0, leg_length_R = 0;
   ///simulation
   Eigen::Vector3d com_sim_current_;
   Eigen::Vector3d com_sim_dot_current_;
@@ -370,7 +320,7 @@ private:
 
   Eigen::Vector3d com_float_current_;
   Eigen::Vector3d com_float_current_RPY;
-  Eigen::Vector3d com_float_current_Euler;
+  Eigen::Vector3d com_global_current_;
   Eigen::Vector3d com_float_current_dot_;
   Eigen::Isometry3d pelv_float_current_;
   Eigen::Isometry3d lfoot_float_current_;
@@ -453,28 +403,6 @@ private:
   Eigen::Vector2d YD_;
   double UX_, UY_; 
 
-  //CP Feedback MJ
-  double R_angle = 0, P_angle = 0;
-  double cp_err_x = 0, cp_err_y = 0; 
-  double cp_err_x_i = 0, cp_err_y_i = 0;
-  double del_px_cp = 0, del_py_cp = 0; 
-
-  double x_cp_ref = 0, y_cp_ref = 0; 
-  double x_cp_act = 0, y_cp_act = 0; 
-  double Wn;  
-  
-  // 속도 구할때
-  double XD_b = 0, YD_b = 0, XD_bb = 0, YD_bb = 0;
-  double X_b = 0, Y_b = 0, X_bb = 0, Y_bb = 0;
-  double XD_vel = 0, YD_vel = 0, XD_vel_b = 0, YD_vel_b = 0;
-  double XA_vel = 0, YA_vel = 0, XA_vel_b = 0, YA_vel_b = 0;
-  // ZMP Controller_MJ
-
-  double px_act = 0, py_act = 0; 
-  double px_err = 0, x_ddot_des = 0, x_dot_des = 0, x_des = 0, x_des_support = 0;
-  double py_err = 0, y_ddot_des = 0, y_dot_des = 0, y_des = 0, y_des_support = 0;
-  // 
-
   //resolved momentum control
   Eigen::Vector3d p_ref_;
   Eigen::Vector3d l_ref_;
@@ -498,8 +426,7 @@ private:
 
   VectorQd thread_q_;
   unsigned int thread_tick_;
-
-  Eigen::Matrix<double, 48, 1> x_bar_right_;
+ 
   Eigen::Matrix<double, 12, 48> kkk_copy_;
   Eigen::Matrix<double, 48, 48> ad_total_copy_;
   Eigen::Matrix<double, 48, 12> bd_total_copy_;
@@ -532,175 +459,13 @@ private:
   Eigen::Matrix<double, 48, 48> kkk_;
 
 
-  //////////////////QP based StateEstimation/////////////////////
-  Eigen::Matrix<double, 18, 6> a_total_;
-  Eigen::Matrix<double, 2, 6> a_kin_;
-  Eigen::Matrix<double, 2, 6> a_c_dot_;
-  Eigen::Matrix<double, 2, 6> a_c_;
-  Eigen::Matrix<double, 2, 6> a_zmp_;
-  Eigen::Matrix<double, 2, 6> a_c_c_dot_;
-  Eigen::Matrix<double, 2, 6> a_f_;
-  Eigen::Matrix<double, 6, 6> a_noise_;
-  Eigen::Matrix<double, 18, 1> b_total_;
-  Eigen::Matrix<double, 2, 1> b_kin_;
-  Eigen::Matrix<double, 2, 1> b_c_dot_;
-  Eigen::Matrix<double, 2, 1> b_c_;
-  Eigen::Matrix<double, 2, 1> b_zmp_;
-  Eigen::Matrix<double, 2, 1> b_c_c_dot_;
-  Eigen::Matrix<double, 2, 1> b_f_;
-  Eigen::Matrix<double, 6, 1> b_noise_;
 
+  //HW 1 ///////////////////////////////////////////////
+  void circling_motion();
+  //////////////////////////////////////////////////////
+  //HW 2 ///////////////////////////////////////////////
 
-  Eigen::Vector3d com_float_old_;
-  Eigen::Vector3d com_float_dot_old_;
-  Eigen::Vector3d com_support_old_;
-  Eigen::Vector3d com_support_dot_old_;
-  Eigen::Vector3d com_sim_old_;
-  Eigen::Vector2d com_support_dot_old_estimation_;
-  Eigen::Vector2d com_support_old_estimation_;
-
-
-  Eigen::Vector2d zmp_r_;
-  Eigen::Vector2d zmp_l_;
-  Eigen::Vector2d zmp_measured_;
-  Eigen::Vector2d zmp_old_estimation_;
-
-  Eigen::Vector6d x_estimation_;
-
-
-  //Riccati variable
-  Eigen::MatrixXd Z11;
-  Eigen::MatrixXd Z12;
-  Eigen::MatrixXd Z21;
-  Eigen::MatrixXd Z22;
-  Eigen::MatrixXd temp1;
-  Eigen::MatrixXd temp2;
-  Eigen::MatrixXd temp3;
-  std::vector<double> eigVal_real; //eigen valueÀÇ real°ª
-  std::vector<double> eigVal_img; //eigen valueÀÇ img°ª
-  std::vector<Eigen::VectorXd> eigVec_real; //eigen vectorÀÇ real°ª
-  std::vector<Eigen::VectorXd> eigVec_img; //eigen vectorÀÇ img°ª
-  Eigen::MatrixXd Z;
-  Eigen::VectorXd deigVal_real;
-  Eigen::VectorXd deigVal_img;
-  Eigen::MatrixXd deigVec_real;
-  Eigen::MatrixXd deigVec_img;
-  Eigen::MatrixXd tempZ_real;
-  Eigen::MatrixXd tempZ_img;
-  Eigen::MatrixXcd U11_inv;
-  Eigen::MatrixXcd X;
-  Eigen::MatrixXd X_sol;
-
-  Eigen::EigenSolver<Eigen::MatrixXd>::EigenvectorsType Z_eig;
-  Eigen::EigenSolver<Eigen::MatrixXd>::EigenvectorsType es_eig;
-  Eigen::MatrixXcd tempZ_comp;
-  Eigen::MatrixXcd U11;
-  Eigen::MatrixXcd U21;
-
-  void getQpEstimationInputMatrix();
-  ////////////////////////////////////////////////////////
-
-
-  /////////////////////////Kalman Filter1///////////////////////
-  Eigen::Matrix<double, 6, 6> Ad_1_;
-  Eigen::Matrix<double, 6, 2> Bd_1_;
-  Eigen::Matrix<double, 4, 6> Cd_1_;
-  Eigen::Matrix<double, 6, 6> Q_1_;
-  Eigen::Matrix<double, 4, 4> R_1_;
-
-
-  Eigen::Matrix<double, 6, 1> X_hat_prio_1_;
-  Eigen::Matrix<double, 6, 1> X_hat_post_1_;
-  Eigen::Matrix<double, 6, 1> X_hat_prio_old_1_;
-  Eigen::Matrix<double, 6, 1> X_hat_post_old_1_;
-
-  Eigen::Matrix<double, 4, 1> Y_1_;
-
-
-
-  Eigen::Matrix<double, 6, 6> P_prio_1_;
-  Eigen::Matrix<double, 6, 6> P_post_1_;
-  Eigen::Matrix<double, 6, 6> P_prio_old_1_;
-  Eigen::Matrix<double, 6, 6> P_post_old_1_;
-
-  Eigen::Matrix<double, 6, 4> K_1_;
-  Eigen::Matrix<double, 6, 4> K_old_1_;
-
-
-  Eigen::Matrix<double, 2, 1> u_old_1_;
-
-  void kalmanFilter1();
-  void kalmanStateSpace1();
-  //////////////////////////////////////////////////////////////
-
-
-  /////////////////////////Kalman Filter2///////////////////////
-
-  Eigen::Matrix<double, 8, 8> Ad_2_;
-  Eigen::Matrix<double, 8, 2> Bd_2_;
-  Eigen::Matrix<double, 4, 8> Cd_2_;
-  Eigen::Matrix<double, 8, 8> Q_2_;
-  Eigen::Matrix<double, 4, 4> R_2_;
-
-
-  Eigen::Matrix<double, 8, 1> X_hat_prio_2_;
-  Eigen::Matrix<double, 8, 1> X_hat_post_2_;
-  Eigen::Matrix<double, 8, 1> X_hat_prio_old_2_;
-  Eigen::Matrix<double, 8, 1> X_hat_post_old_2_;
-
-  Eigen::Matrix<double, 4, 1> Y_2_;
-
-
-
-  Eigen::Matrix<double, 8, 8> P_prio_2_;
-  Eigen::Matrix<double, 8, 8> P_post_2_;
-  Eigen::Matrix<double, 8, 8> P_prio_old_2_;
-  Eigen::Matrix<double, 8, 8> P_post_old_2_;
-
-  Eigen::Matrix<double, 8, 4> K_2_;
-  Eigen::Matrix<double, 8, 4> K_old_2_;
-
-  Eigen::Matrix<double, 2, 1> u_old_2_;
-
-
-  void kalmanFilter2();
-  void kalmanStateSpace2();
-  //////////////////////////////////////////////////////////////
-
-
-  /////////////////////////Kalman Filter3///////////////////////
-
-  Eigen::Matrix<double, 10, 10> Ad_3_;
-  Eigen::Matrix<double, 10, 2> Bd_3_;
-  Eigen::Matrix<double, 6, 10> Cd_3_;
-  Eigen::Matrix<double, 10, 10> Q_3_;
-  Eigen::Matrix<double, 6, 6> R_3_;
-
-
-  Eigen::Matrix<double, 10, 1> X_hat_prio_3_;
-  Eigen::Matrix<double, 10, 1> X_hat_post_3_;
-  Eigen::Matrix<double, 10, 1> X_hat_prio_old_3_;
-  Eigen::Matrix<double, 10, 1> X_hat_post_old_3_;
-
-  Eigen::Matrix<double, 6, 1> Y_3_;
-
-
-
-  Eigen::Matrix<double, 10, 10> P_prio_3_;
-  Eigen::Matrix<double, 10, 10> P_post_3_;
-  Eigen::Matrix<double, 10, 10> P_prio_old_3_;
-  Eigen::Matrix<double, 10, 10> P_post_old_3_;
-
-  Eigen::Matrix<double, 10, 6> K_3_;
-  Eigen::Matrix<double, 10, 6> K_old_3_;
-
-
-  Eigen::Matrix<double, 2, 1> u_old_3_;
-
-  void kalmanFilter3();
-  void kalmanStateSpace3();
-  //////////////////////////////////////////////////////////////
-
+  //////////////////////////////////////////////////////
 };
 
 }

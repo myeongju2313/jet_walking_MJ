@@ -1,7 +1,7 @@
 <mujoco model="dyros_jet_robot">
     <compiler angle="radian" meshdir="../meshes/"/>
     <size njmax="500" nconmax="100" />
-	<option gravity= "0 0 0"/>
+	<?option gravity= "0 0 0"/?>
 	<default>
     <?joint damping="200" frictionloss="6"/?>
 	<geom rgba = ".7 .7 .7 1"/>
@@ -278,15 +278,15 @@
                 <position class="position" ctrllimited="false"  name="L_HipRoll" joint="L_HipRoll" kp = "15000"/>
 		<position class="position" ctrllimited="true" ctrlrange="-5 5"  name="L_HipPitch" joint="L_HipPitch" kp = "15000"/> 
 	        <position class="position" ctrllimited="false"   name="L_KneePitch" joint="L_KneePitch" kp = "15000"/> 
-		<position class="position" ctrllimited="true" ctrlrange="-5 5"  name="L_AnklePitch" joint="L_AnklePitch" kp = "10000"/>
-                <position class="position" ctrllimited="true" ctrlrange="-5 5"  name="L_AnkleRoll" joint="L_AnkleRoll" kp = "10000"/> 
+		<position class="position" ctrllimited="true" ctrlrange="-5 5"  name="L_AnklePitch" joint="L_AnklePitch" kp = "12000"/>
+                <position class="position" ctrllimited="true" ctrlrange="-5 5"  name="L_AnkleRoll" joint="L_AnkleRoll" kp = "12000"/> 
 					
 		<position class="position" ctrllimited="true" ctrlrange="-5 5"  name="R_HipYaw" joint="R_HipYaw" kp = "15000"/>
                 <position class="position" ctrllimited="false"   name="R_HipRoll" joint="R_HipRoll" kp = "15000"/>
 		<position class="position" ctrllimited="true" ctrlrange="-5 5"  name="R_HipPitch" joint="R_HipPitch" kp = "15000"/>
 		<position class="position" ctrllimited="false"  name="R_KneePitch" joint="R_KneePitch" kp = "15000"/>
-		<position class="position" ctrllimited="true" ctrlrange="-5 5"  name="R_AnklePitch" joint="R_AnklePitch" kp = "10000"/>
-                <position class="position" ctrllimited="true" ctrlrange="-5 5"  name="R_AnkleRoll" joint="R_AnkleRoll" kp = "10000"/>
+		<position class="position" ctrllimited="true" ctrlrange="-5 5"  name="R_AnklePitch" joint="R_AnklePitch" kp = "12000"/>
+                <position class="position" ctrllimited="true" ctrlrange="-5 5"  name="R_AnkleRoll" joint="R_AnkleRoll" kp = "12000"/>
 
                 <position class="position" ctrllimited="true" ctrlrange="-3 3"  name="WaistPitch" joint="WaistPitch" kp = "15000"/>
                 <position class="position" ctrllimited="true" ctrlrange="-3 3"  name="WaistYaw" joint="WaistYaw" kp = "15000"/>

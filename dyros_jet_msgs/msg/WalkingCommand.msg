@@ -11,6 +11,7 @@ uint32 EXTERNAL_ENCODER = 1
 uint32 ik_mode
 uint32 IK=0
 uint32 JACOBIAN = 1
+uint32 QP=2
 
 bool heel_toe
 

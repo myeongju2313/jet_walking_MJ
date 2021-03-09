@@ -43,7 +43,7 @@
 #include "dyros_jet_controller/task_controller.h"
 #include "dyros_jet_controller/haptic_controller.h"
 #include "dyros_jet_controller/joint_controller.h"
-#include "dyros_jet_controller/walking_controller_hw.h"
+#include "dyros_jet_controller/walking_controller.h"
 #include "dyros_jet_controller/moveit_controller.h"
 #include "dyros_jet_controller/haptic_controller.h"
 

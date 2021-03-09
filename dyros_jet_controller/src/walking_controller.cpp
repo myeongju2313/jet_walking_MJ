@@ -1,5 +1,5 @@
 #include "dyros_jet_controller/dyros_jet_model.h" 
-#include "dyros_jet_controller/walking_controller_hw.h"
+#include "dyros_jet_controller/walking_controller.h"
 #include "cvxgen_6_8_0/cvxgen/solver.h"
 #include <fstream>
 #include <tf/tf.h>
@@ -19,7 +19,7 @@ void WalkingController::compute()
   {
     updateInitialState();  
     getRobotState();  
-    floatToSupportFootstep(); 
+    floatToSupportFootstep();  
 
     if(ready_for_thread_flag_ == false)
     { ready_for_thread_flag_ = true; }
@@ -153,43 +153,439 @@ void WalkingController::getRobotState()
 {
   Eigen::Matrix<double, DyrosJetModel::MODEL_WITH_VIRTUAL_DOF, 1> q_temp, qdot_temp;
   q_temp.setZero();
-  qdot_temp;  
+  qdot_temp; 
+  // 실시간 실제 CoM Update
   q_temp.segment<28>(6) = current_q_.segment<28>(0);   
   qdot_temp.segment<28>(6)= current_qdot_.segment<28>(0);
-
-  //if(walking_tick_ > 0) 
-  //{ q_temp.segment<12>(6) = desired_q_not_compensated_.segment<12>(0);}
-
+  /*
+  if(walking_tick_ > 0) 
+  { q_temp.segment<12>(6) = desired_q_not_compensated_.segment<12>(0);}
+  */
   model_.updateKinematics(q_temp, qdot_temp);
   com_float_current_ = model_.getCurrentCom();
   com_float_current_dot_= model_.getCurrentComDot();
   lfoot_float_current_ = model_.getCurrentTransform((DyrosJetModel::EndEffector)0); 
   rfoot_float_current_ = model_.getCurrentTransform((DyrosJetModel::EndEffector)1);
-    
+
+  ///////////////////////////////////////////////////////////////
+  q_sim_virtual_ = model_.getMujocoCom();
+  double w = sqrt(1-((q_sim_virtual_(3))*(q_sim_virtual_(3)))-((q_sim_virtual_(4))*(q_sim_virtual_(4)))-((q_sim_virtual_(5))*(q_sim_virtual_(5))));
+  tf::Quaternion q_mjc(q_sim_virtual_(3),q_sim_virtual_(4),q_sim_virtual_(5),w);
+
+  Eigen::Quaterniond q;
+
+  q.x() = q_sim_virtual_(3);
+  q.y() = q_sim_virtual_(4);
+  q.z() = q_sim_virtual_(5);
+  q.w() = w;
+
+  R = q.normalized().toRotationMatrix();   
+  R_.setIdentity(); 
+
+  R_(0,0) = R(0,0); R_(0,1) = R(0,1); R_(0,2) = R(0,2);
+  R_(1,0) = R(1,0); R_(1,1) = R(1,1); R_(1,2) = R(1,2);
+  R_(2,0) = R(2,0); R_(2,1) = R(2,1); R_(2,2) = R(2,2);
+
+  double r_mjc,p_mjc,y_mjc;
+  tf::Matrix3x3 m(q_mjc);
+  m.getRPY(r_mjc,p_mjc,y_mjc);  
+  R_angle = r_mjc; P_angle = p_mjc;
+  R_angle_i = R_angle_i + R_angle * del_t;
+  P_angle_i = P_angle_i + P_angle * del_t;
+  
+  com_global_current_ = R*com_float_current_; // global frame 기준 // pelvis에서 본 CoM 위치
+  ///////////////////////////////////////////////////////////////
+  lfoot_float_current_Euler = R_ * lfoot_float_current_; // global frame 에서 본 왼발
+  rfoot_float_current_Euler = R_ * rfoot_float_current_; // global frame 에서 본 오른발
+  
+  if(foot_step_(current_step_num_, 6) == 0) 
+  { supportfoot_float_current_Euler = rfoot_float_current_Euler; }
+  else if(foot_step_(current_step_num_, 6) == 1)
+  { supportfoot_float_current_Euler = lfoot_float_current_Euler; } // global frame 에서 본 지지발 
+  pelv_support_current_ = DyrosMath::inverseIsometry3d(supportfoot_float_current_);
+  pelv_support_current_Euler = R_*pelv_support_current_; 
+  com_support_current_Euler =  DyrosMath::multiplyIsometry3dVector3d(pelv_support_current_Euler, com_global_current_);
+  Eigen::Vector3d aaa;
+  aaa = R*com_support_current_;
+
+  //MJ_graph << com_global_current_(0) << "," << com_global_current_(1) << endl;
+  ///////////////////////////////////////////////////////////////
   if(foot_step_(current_step_num_, 6) == 0) 
   { supportfoot_float_current_ = rfoot_float_current_; }
   else if(foot_step_(current_step_num_, 6) == 1)
   { supportfoot_float_current_ = lfoot_float_current_; }
+ 
+  if(current_step_num_ != 0 && walking_tick_ == t_start_) // step change
+  { 
+    if(foot_step_(current_step_num_, 6) == 0)
+    {
+      com_support_current_dot = (DyrosMath::multiplyIsometry3dVector3d(DyrosMath::inverseIsometry3d(lfoot_float_current_), com_float_current_) - com_support_current_)*hz_;
+    }
+    else if(foot_step_(current_step_num_, 6) == 1)
+    {
+      com_support_current_dot = (DyrosMath::multiplyIsometry3dVector3d(DyrosMath::inverseIsometry3d(rfoot_float_current_), com_float_current_) - com_support_current_)*hz_;
+    }
+  }
 
   pelv_support_current_ = DyrosMath::inverseIsometry3d(supportfoot_float_current_);
-  pelv_float_current_.setIdentity();
+   
   lfoot_support_current_ = DyrosMath::multiplyIsometry3d(pelv_support_current_,lfoot_float_current_);
   rfoot_support_current_ = DyrosMath::multiplyIsometry3d(pelv_support_current_,rfoot_float_current_);     
+ 
+  com_support_current_b = com_support_current_;
   com_support_current_ =  DyrosMath::multiplyIsometry3dVector3d(pelv_support_current_, com_float_current_);
+  if(walking_tick_ != t_start_)
+  { 
+    com_support_current_dot = (com_support_current_ - com_support_current_b)*hz_; 
+  }   
+
+  if(walking_tick_ == 0)
+  {
+    com_support_current_dot.setZero(); 
+    com_support_current_dot_LPF = com_support_current_dot;
+  }  
+  com_support_current_dot_LPF = (2*M_PI*6.0*del_t)/(1+2*M_PI*6.0*del_t)*com_support_current_dot + 1/(1+2*M_PI*6.0*del_t)*com_support_current_dot_LPF;
+
+  r_ft_ = model_.getRightFootForce();
+  l_ft_ = model_.getLeftFootForce();
   
   current_motor_q_leg_ = current_q_.segment<12>(0);
 }
 
+void WalkingController::calculateFootStepTotal_MJ()
+{    
+  double initial_rot = 0.0;
+  double final_rot = 0.0;
+  double initial_drot = 0.0;
+  double final_drot = 0.0;
+
+  initial_rot = atan2(target_y_, target_x_); // GUI 명령에서 받아오는 값으로 회전 각도 계산.
+  
+  if(initial_rot > 0.0) // 반시계 방향으로 회전, GUI 에서는 이것만 됨.
+    initial_drot = 10*DEG2RAD;
+  else // 시계 방향으로 회전.
+    initial_drot = -10*DEG2RAD;
+
+  unsigned int initial_total_step_number = initial_rot/initial_drot; // 처음 실제 회전해야하는 각도 / 10deg , 정수만 추려냄. 
+  double initial_residual_angle = initial_rot - initial_total_step_number*initial_drot; // 정수만 추려낸 나머지 회전해야 하는 각도.
+
+  final_rot = target_theta_ - initial_rot; // 원하는 회전 각도가 없으면, 처음각도에 음수만 붙이면 다시 원상태로 돌릴 수 있음.
+  if(final_rot > 0.0)
+    final_drot = 10*DEG2RAD; // 반시계 방향 회전.
+  else
+    final_drot = -10*DEG2RAD; // 시계 방향 회전.
+
+  unsigned int final_total_step_number = final_rot/final_drot; // 마지막 실제 회전해야 하는 각도 / 10deg, 정수만 추려냄.
+  double final_residual_angle = final_rot - final_total_step_number*final_drot; // 정수만 추려낸 나머지 회전해야 하는 각도.
+  double length_to_target = sqrt(target_x_*target_x_ + target_y_*target_y_); // 목표까지의 최종 거리.
+  double dlength = step_length_x_;
+  
+  //////////// 명주 추가
+  double first_step_length = 0.1;
+  double initial_step_number = 0; double clength = 0;
+  initial_step_number = (dlength - first_step_length) / 0.05;  
+  int initial_step_number_i = initial_step_number + 0.0001;
+
+  for(int i = 0; i < initial_step_number_i; i++)
+  {
+    clength = clength + first_step_length;
+    first_step_length += 0.05;
+  }  
+  
+  //unsigned int middle_total_step_number = length_to_target/dlength; // 목표 최종 거리를 Step 보폭으로 나눈 정수로 표현한 스텝 갯수.
+  unsigned int middle_total_step_number = initial_step_number_i + (int)((length_to_target - clength)/dlength); // 3 + (0.55)/ 0.25
+  //double middle_residual_length = length_to_target - middle_total_step_number*dlength; // 나머지 거리.
+  double middle_residual_length = (length_to_target - clength) - dlength * (middle_total_step_number - initial_step_number_i); 
+  /////////// 
+  if(length_to_target == 0) // 제자리 걸음
+  {
+    middle_total_step_number = 100; //walking on the spot 10 times
+    dlength = 0;
+  }
+  ////// 목표 x, y 변위, 설정된 step length를 이용해서 middle_total_step number를 구함.
+  
+  unsigned int number_of_foot_step;
+
+  int del_size;
+
+  del_size = 1;
+  number_of_foot_step = initial_total_step_number*del_size + middle_total_step_number*del_size + final_total_step_number*del_size;
+  
+  if(initial_total_step_number != 0 || abs(initial_residual_angle) >= 0.0001) // 회전이 있는 경우.
+  {
+    if(initial_total_step_number % 2 == 0) // 회전해야 하는 Step 수가 짝수 일 경우. 
+      number_of_foot_step = number_of_foot_step + 2*del_size; // 예를 들어, 45도 회전일 경우, initial_total_step_number = 4, 5번째 발이 목표에 오고, 6번째 발이 5번째 발과 맞춰짐 
+    else // 회전해야 하는 Step 수가 홀수 일 경우
+    {
+      if(abs(initial_residual_angle)>= 0.0001) // 회전해야 하는 Step 수가 홀수면서 나머지 회전 해야하는 각도가 남았을 경우, 기존에서 3 Step 추가
+        number_of_foot_step = number_of_foot_step + 3*del_size; // 예를 들어, 15도 회전일 경우, initial_total_step_number = 1, 2번째 발이 목표에 오고 3번째 발이 2번쨰 발과 맞춰짐, 마지막 발은 제자리.
+      else
+        number_of_foot_step = number_of_foot_step + del_size; // 회전해야 하는 Step 수가 홀수면서 나머지 회전 해야하는 각도가 남지 않았을 경우, 기존에서 1 Step (반대 발) 추가
+    }
+  }
+  
+  if(middle_total_step_number != 0 || abs(middle_residual_length)>=0.0001) //제자리 걸음이 아닌 경우.
+  {
+    if(middle_total_step_number % 2 == 0) // 목표거리가 Step 길이의 짝수배 일 경우. 예를 들어 목표 길이가 1.2m 인 경우 middle_total_step_number는 6임. 6번째 목표에 맞춰지고 7번째 발이 6번째 발 옆에, 8번째 발은 제자리걸음.
+      number_of_foot_step = number_of_foot_step + 2*del_size; // 첫 발이 오른발인 경우 마지막 Swing이 왼발이고, 오른발은 마지막 Swing 발 바로 옆에 위치, 왼발은 다시한번 제자리 step
+    else // 목표거리가 Step 길이의 홀수배 일 경우
+    {
+      if(abs(middle_residual_length)>= 0.0001) 
+        number_of_foot_step = number_of_foot_step + 3*del_size; // 예를 들어 목표 길이가 1.1m 인 경우, middle_total_step_number = 5, 나머지 10cm 때문에 6번째 발이 절반 Swing, 7번재 Swing발이 바로 옆에 위치, 8번째 발이 마지막 제자리 step, 더해져 8이됨.   
+      else
+        number_of_foot_step = number_of_foot_step + del_size; // 예를 들어 목표 길이가 1m 인 경우 middle_total_step_number는 5임. 거기서 마지막 Swing 발이 이전 Swing발 바로 옆에 위치, 1이 더해져 6이 됨. (목표 변위에는 영향 없음.)
+    }
+  }
+  
+  if(final_total_step_number != 0 || abs(final_residual_angle) >= 0.0001) // 마지막으로 다시 로봇의 방향을 되돌리는 회전이 있는 경우.
+  {
+    if(abs(final_residual_angle) >= 0.0001) // 나머지 회전 각도가 남았을 경우.
+      number_of_foot_step = number_of_foot_step + 2*del_size; // 최종적으로 2 step 더해줌.
+    else
+      number_of_foot_step = number_of_foot_step + del_size; // 나머지 회전 각도가 남지 않았을 경우, 한걸음만 추가.
+  }
+  
+  // 여기까지 발걸음 개수 계산.
+
+  foot_step_.resize(number_of_foot_step, 7);
+  foot_step_.setZero();
+  foot_step_support_frame_.resize(number_of_foot_step, 7);
+  foot_step_support_frame_.setZero(); 
+
+  int index = 0;
+  int temp, temp2, temp3, is_right;
+
+  if(is_right_foot_swing_ == true)
+    is_right = 1;
+  else
+    is_right = -1;
+
+
+  temp = -is_right; //right foot will be first swingfoot
+  temp2 = -is_right;
+  temp3 = -is_right;
+
+
+  if(initial_total_step_number != 0 || abs(initial_residual_angle) >= 0.0001) // 회전이 있는 경우.
+  {
+    for (int i =0 ; i < initial_total_step_number; i++) // 45도 회전하면, index가 0 ~ 3이므로 4발자국을 먼저 찍는 것.
+    {
+      temp *= -1;
+      foot_step_(index,0) = temp*0.127794*sin((i+1)*initial_drot); // 10도씩 회전 시키는데, 회전 했을때의 X방향 좌표.
+      foot_step_(index,1) = -temp*0.127794*cos((i+1)*initial_drot); // 10도씩 회전 시킬때, 회전 했을때의 Y방향 좌표.
+      foot_step_(index,5) = (i+1)*initial_drot; // Z방향 10도 돌린 Foot step.
+      foot_step_(index,6) = 0.5 + 0.5*temp; // 오른 발이 Swing 일때는, 1.
+      index++;
+    }
+
+    if(temp == is_right)
+    {
+      if(abs(initial_residual_angle) >= 0.0001) // 예를 들어 15 deg 회전이면, 첫번째 오른 Swing 발이 10deg, 두번째 왼 Swing 발이 15deg, 세번째 오른 Swing발이 15도, 나머지 제자리.
+      {
+        temp *= -1;
+
+        foot_step_(index,0) = temp*0.127794*sin((initial_total_step_number)*initial_drot + initial_residual_angle);
+        foot_step_(index,1) = -temp*0.127794*cos((initial_total_step_number)*initial_drot + initial_residual_angle);
+        foot_step_(index,5) = (initial_total_step_number)*initial_drot + initial_residual_angle;
+        foot_step_(index,6) = 0.5 + 0.5*temp;
+        index++;
+
+        temp *= -1;
+
+        foot_step_(index,0) = temp*0.127794*sin((initial_total_step_number)*initial_drot + initial_residual_angle);
+        foot_step_(index,1) = -temp*0.127794*cos((initial_total_step_number)*initial_drot+initial_residual_angle);
+        foot_step_(index,5) = (initial_total_step_number)*initial_drot + initial_residual_angle;
+        foot_step_(index,6) = 0.5 + 0.5*temp;
+        index++;
+
+        temp *= -1;
+
+        foot_step_(index,0) = temp*0.127794*sin((initial_total_step_number)*initial_drot + initial_residual_angle);
+        foot_step_(index,1) = -temp*0.127794*cos((initial_total_step_number)*initial_drot+initial_residual_angle);
+        foot_step_(index,5) = (initial_total_step_number)*initial_drot + initial_residual_angle;
+        foot_step_(index,6) = 0.5 + 0.5*temp;
+        index++;
+
+      }
+      else
+      {
+        temp *= -1;
+
+        foot_step_(index,0) = temp*0.127794*sin((initial_total_step_number)*initial_drot + initial_residual_angle);
+        foot_step_(index,1) = -temp*0.127794*cos((initial_total_step_number)*initial_drot + initial_residual_angle);
+        foot_step_(index,5) = (initial_total_step_number)*initial_drot + initial_residual_angle;
+        foot_step_(index,6) = 0.5 + 0.5*temp;
+        index++;
+      }
+    }
+    else if(temp == -is_right) // 여분으로 움직여야 할 각도가 있고 시작을 오른 발 Swing으로 할 때.
+    {
+      temp *= -1;
+
+      foot_step_(index,0) = temp*0.127794*sin((initial_total_step_number)*initial_drot + initial_residual_angle); // 나머지 각도 채워줌.
+      foot_step_(index,1) = -temp*0.127794*cos((initial_total_step_number)*initial_drot + initial_residual_angle);
+      foot_step_(index,5) = (initial_total_step_number)*initial_drot + initial_residual_angle;
+      foot_step_(index,6) = 0.5 + 0.5*temp;
+      index ++;
+
+      temp *= -1;
+
+      foot_step_(index,0) = temp*0.127794*sin((initial_total_step_number)*initial_drot + initial_residual_angle); // 반대 발도 나머지 각도 채워줌.
+      foot_step_(index,1) = -temp*0.127794*cos((initial_total_step_number)*initial_drot + initial_residual_angle);
+      foot_step_(index,5) = (initial_total_step_number)*initial_drot + initial_residual_angle;
+      foot_step_(index,6) = 0.5 + 0.5*temp;
+      index ++;
+    }
+  }
+  unsigned int temp_mj = 0; double mlength = 0.1;  
+  
+  if(middle_total_step_number != 0 || abs(middle_residual_length) >= 0.0001)
+  {
+    for (int i = 0 ; i < middle_total_step_number; i++) // 예를 들어 1m 면, middle_total_step_number = 5,
+    {
+      temp2 *= -1; // Swing발이 오른발이면 temp는 1.
+       
+      if(temp_mj < initial_step_number_i)
+      { 
+        foot_step_(index,0) = cos(initial_rot)*(mlength*(1)) + temp2*sin(initial_rot)*(0.127794); // Z방향으로 initial_rot 만큼 회전 시켰을 때, X방향 좌표.
+        foot_step_(index,1) = sin(initial_rot)*(mlength*(1)) - temp2*cos(initial_rot)*(0.127794); // Z방향으로 initial_rot 만큼 회전 시켰을 때, Y방향 좌표.
+        mlength = 0.1 + mlength + 0.05*(i+1);
+      }
+      else if(temp_mj >= initial_step_number_i)
+      { 
+        foot_step_(index,0) = cos(initial_rot)*(mlength*(1)) + temp2*sin(initial_rot)*(0.127794); // Z방향으로 initial_rot 만큼 회전 시켰을 때, X방향 좌표.
+        foot_step_(index,1) = sin(initial_rot)*(mlength*(1)) - temp2*cos(initial_rot)*(0.127794); // Z방향으로 initial_rot 만큼 회전 시켰을 때, Y방향 좌표.
+        mlength += dlength ;        
+      }
+      
+      foot_step_(index,5) = initial_rot;
+      foot_step_(index,6) = 0.5 + 0.5*temp2;
+      index ++;
+      temp_mj ++;            
+    }  
+
+    if(temp2 == is_right)
+    {
+      if(abs(middle_residual_length) >= 0.0001) // 예를 들어 목표가 1.1m이면 20cm 보폭으로 나눴을 때 10cm의 나머지 거리가 생김.
+      { // 3 Step 모두 같은 발자국 위치를 가짐.
+        temp2 *= -1; // temp를 -1로 바꿈 (왼발을 Swing 발로)
+
+        //foot_step_(index,0) = cos(initial_rot)*(mlength*(middle_total_step_number) + middle_residual_length) + temp2*sin(initial_rot)*(0.127794);
+        //foot_step_(index,1) = sin(initial_rot)*(mlength*(middle_total_step_number) + middle_residual_length) - temp2*cos(initial_rot)*(0.127794);
+        foot_step_(index,0) = cos(initial_rot)*(mlength + middle_residual_length - dlength) + temp2*sin(initial_rot)*(0.127794);
+        foot_step_(index,1) = sin(initial_rot)*(mlength + middle_residual_length - dlength) - temp2*cos(initial_rot)*(0.127794);
+        foot_step_(index,5) = initial_rot;
+        foot_step_(index,6) = 0.5 + 0.5*temp2; // 0 -> 오른 발이 Support foot.
+         
+        //나머지 거리만큼 왼발로 감. 목표치를 만족 시킴.
+        index++;
+
+        temp2 *= -1; // temp를 1로 바꿈 (오른발을 Swing 발로)
+
+        //foot_step_(index,0) = cos(initial_rot)*(mlength*(middle_total_step_number) + middle_residual_length) + temp2*sin(initial_rot)*(0.127794);
+        //foot_step_(index,1) = sin(initial_rot)*(mlength*(middle_total_step_number) + middle_residual_length) - temp2*cos(initial_rot)*(0.127794);
+        foot_step_(index,0) = cos(initial_rot)*(mlength + middle_residual_length - dlength) + temp2*sin(initial_rot)*(0.127794);
+        foot_step_(index,1) = sin(initial_rot)*(mlength + middle_residual_length - dlength) - temp2*cos(initial_rot)*(0.127794);
+        foot_step_(index,5) = initial_rot;
+        foot_step_(index,6) = 0.5 + 0.5*temp2;
+        index++;
+
+        temp2 *= -1; // 제자리 Step.
+
+        //foot_step_(index,0) = cos(initial_rot)*(mlength*(middle_total_step_number) + middle_residual_length) + temp2*sin(initial_rot)*(0.127794);
+        //foot_step_(index,1) = sin(initial_rot)*(mlength*(middle_total_step_number) + middle_residual_length) - temp2*cos(initial_rot)*(0.127794);
+        foot_step_(index,0) = cos(initial_rot)*(mlength + middle_residual_length - dlength) + temp2*sin(initial_rot)*(0.127794);
+        foot_step_(index,1) = sin(initial_rot)*(mlength + middle_residual_length - dlength) - temp2*cos(initial_rot)*(0.127794);
+        foot_step_(index,5) = initial_rot;
+        foot_step_(index,6) = 0.5 + 0.5*temp2;
+        index++;
+      }
+      else // 예를 들어 1m이면 20cm 보폭으로 나눴을때 나머지가 없기 때문에, 
+      {
+        temp2 *= -1; // 왼발을 Swing 발로 바꿔주고, 제자리에서 Step. (residual_length가 0이기 때문에)
+
+        //foot_step_(index,0) = cos(initial_rot)*(mlength*(middle_total_step_number) + middle_residual_length) + temp2*sin(initial_rot)*(0.127794);
+        //foot_step_(index,1) = sin(initial_rot)*(mlength*(middle_total_step_number) + middle_residual_length) - temp2*cos(initial_rot)*(0.127794);
+        foot_step_(index,0) = cos(initial_rot)*(mlength + middle_residual_length - dlength) + temp2*sin(initial_rot)*(0.127794);
+        foot_step_(index,1) = sin(initial_rot)*(mlength + middle_residual_length - dlength) - temp2*cos(initial_rot)*(0.127794);
+        foot_step_(index,5) = initial_rot;
+        foot_step_(index,6) = 0.5 + 0.5*temp2; // 왼발이 Swing 발이기 때문에 temp는 -1, 그러므로 foot_step(i,6) = 0
+        index++;
+      }
+    }
+    else if(temp2 == -is_right) // 끝이 왼발 swing으로 끝났을 때.
+    {
+      temp2 *= -1; // temp를 1로 바꿔주고 (오른쪽 발 Swing)
+
+      //foot_step_(index,0) = cos(initial_rot)*(mlength*(middle_total_step_number) + middle_residual_length) + temp2*sin(initial_rot)*(0.127794);
+      //foot_step_(index,1) = sin(initial_rot)*(mlength*(middle_total_step_number) + middle_residual_length) - temp2*cos(initial_rot)*(0.127794);
+      foot_step_(index,0) = cos(initial_rot)*(mlength + middle_residual_length - dlength) + temp2*sin(initial_rot)*(0.127794);
+      foot_step_(index,1) = sin(initial_rot)*(mlength + middle_residual_length - dlength) - temp2*cos(initial_rot)*(0.127794);
+      foot_step_(index,5) = initial_rot;
+      foot_step_(index,6) = 0.5 + 0.5*temp2; 
+      index++;
+
+      temp2 *= -1;
+      // 제자리 Step.
+      //foot_step_(index,0) = cos(initial_rot)*(mlength*(middle_total_step_number) + middle_residual_length) + temp2*sin(initial_rot)*(0.127794);
+      //foot_step_(index,1) = sin(initial_rot)*(mlength*(middle_total_step_number) + middle_residual_length) - temp2*cos(initial_rot)*(0.127794);
+      foot_step_(index,0) = cos(initial_rot)*(mlength + middle_residual_length - dlength) + temp2*sin(initial_rot)*(0.127794);
+      foot_step_(index,1) = sin(initial_rot)*(mlength + middle_residual_length - dlength) - temp2*cos(initial_rot)*(0.127794);
+      foot_step_(index,5) = initial_rot;
+      foot_step_(index,6) = 0.5 + 0.5*temp2;
+      index++;
+    }
+  }
+
+  double final_position_x = cos(initial_rot)*(mlength + middle_residual_length - dlength); // 최종적으로 도착한 목적지의 X 좌표.
+  double final_position_y = sin(initial_rot)*(mlength + middle_residual_length - dlength); // 최종적으로 도착한 목적지의 Y 좌표. 
+
+  if(final_total_step_number != 0 || abs(final_residual_angle) >= 0.0001) // 최종적으로 로봇을 원래 방향대로 회전 해야 할 경우.
+  {
+    for(int i = 0 ; i < final_total_step_number; i++)
+    {
+      temp3 *= -1; // temp를 1로 만듬 (오른발 Swing), 예를 들어 45도 회전해야 한다고 하면, 4번 회전 먼저 하고
+
+      foot_step_(index,0) = final_position_x + temp3*0.127794*sin((i+1)*final_drot + initial_rot);
+      foot_step_(index,1) = final_position_y - temp3*0.127794*cos((i+1)*final_drot + initial_rot);
+      foot_step_(index,5) = (i+1)*final_drot + initial_rot;
+      foot_step_(index,6) = 0.5 + 0.5*temp3;
+      index++;
+    }
+
+    if(abs(final_residual_angle) >= 0.0001) // 남은 각도는 10deg 미만이기 때문에 한번에 감.
+    {
+      temp3 *= -1; // 두 Step의 발자국 위치는 같고 첫 Step 먼저 목표에 위치하고 두번째 Step이 다음으로 위치.
+
+      foot_step_(index,0) = final_position_x + temp3*0.127794*sin(target_theta_);
+      foot_step_(index,1) = final_position_y - temp3*0.127794*cos(target_theta_);
+      foot_step_(index,5) = target_theta_;
+      foot_step_(index,6) = 0.5 + 0.5*temp3;
+      index++;
+
+      temp3 *= -1;
+
+      foot_step_(index,0) = final_position_x + temp3*0.127794*sin(target_theta_);
+      foot_step_(index,1) = final_position_y - temp3*0.127794*cos(target_theta_);
+      foot_step_(index,5) = target_theta_;
+      foot_step_(index,6) = 0.5 + 0.5*temp3;
+      index++;
+    }
+    else
+    { // 여분의 각도가 없다면, 반대발은 그냥 제자리 걸음 한번.
+      temp3 *= -1;
+
+      foot_step_(index,0) = final_position_x + temp3*0.127794*sin(target_theta_);
+      foot_step_(index,1) = final_position_y - temp3*0.127794*cos(target_theta_);
+      foot_step_(index,5) = target_theta_;
+      foot_step_(index,6) = 0.5 + 0.5*temp3;
+      index++;
+    }
+  }
+}
+
 void WalkingController::calculateFootStepTotal()
-{
-  /*
-   * this function calculate foot steps which the robot should put on
-   * algorithm: set robot orientation to the destination -> go straight -> set target orientation on the destination
-   *
-   * foot_step_(current_step_num_, i) is the foot step where the robot will step right after
-   * foot_step_(current_step_num_, 6) = 0 means swingfoot is left(support foot is right)
-   */ 
-   
+{    
   double initial_rot = 0.0;
   double final_rot = 0.0;
   double initial_drot = 0.0;
@@ -220,7 +616,7 @@ void WalkingController::calculateFootStepTotal()
   
   if(length_to_target == 0) // 제자리 걸음
   {
-    middle_total_step_number = 10; //walking on the spot 10 times
+    middle_total_step_number = 100; //walking on the spot 10 times
     dlength = 0;
   }
   ////// 목표 x, y 변위, 설정된 step length를 이용해서 middle_total_step number를 구함.
@@ -548,11 +944,11 @@ void WalkingController::floatToSupportFootstep()
 }
 
 void WalkingController::updateInitialState()
-{
+{  
   if(walking_tick_ == 0)
   {
     calculateFootStepTotal(); 
- 
+    //calculateFootStepTotal_MJ();
     com_float_init_ = model_.getCurrentCom();
     pelv_float_init_.setIdentity();
     lfoot_float_init_ = model_.getCurrentTransform((DyrosJetModel::EndEffector)(0));
@@ -696,6 +1092,7 @@ void WalkingController::zmpGenerator(const unsigned int norm_size, const unsigne
       index++;
     }    
   }
+  /////////////////////////////////////////////////////////////////////
   if(current_step_num_ >= total_step_num_ - planning_step_num)
   {  
     for(unsigned int i = current_step_num_; i < total_step_num_; i++)
@@ -740,99 +1137,92 @@ void WalkingController::onestepZmp(unsigned int current_step_number, Eigen::Vect
   temp_px.setZero();
   temp_py.setZero();
 
-  double Kx = 0, Ky = 0, A = 0, B = 0, wn = 0;
+  double Kx = 0, Ky = 0, A = 0, B = 0, wn = 0, Kx2 = 0, Ky2 = 0; 
   if(current_step_number == 0)
-  { 
-    wn = sqrt(GRAVITY / com_support_init_(2));
-    A = -(foot_step_support_frame_(current_step_number, 1))/2 ;
-    B =  (supportfoot_support_init_(0) + foot_step_support_frame_(current_step_number, 0))/2;
-    Kx = (B * 0.15 * wn) / ((0.15*wn) + tanh(wn*(0.45)));
-    Ky = (A * 0.15 * wn * tanh(wn*0.45))/(1 + 0.15 * wn * tanh(wn*0.45));
-        
+  {
+    Kx = 0; 
+    Ky = - com_support_init_(1);
+    Kx2 = foot_step_support_frame_(current_step_number,0) / 2;
+    Ky2 = foot_step_support_frame_(current_step_number,1) / 2;
+    
     for(int i = 0; i < t_total_; i++)
     {
-      if(i >= 0 && i < t_rest_init_ + t_double1_) //0 ~ 0.15초 , 0 ~ 30 tick
+      if(i >= 0 && i < t_rest_init_ + t_double1_) //0.05 ~ 0.15초 , 10 ~ 30 tick
       {
-        temp_px(i) = 0;
-        temp_py(i) = (com_offset_(1) + com_support_init_(1)) + Ky / (t_rest_init_ + t_double1_)* (i+1);
+        temp_px(i) = Kx / (t_double1_ + t_rest_init_) * (i+1);
+        temp_py(i) = com_support_init_(1) + Ky / (t_double1_ + t_rest_init_) * (i+1);
       }
       else if(i >= t_rest_init_ + t_double1_ && i < t_total_ - t_rest_last_ - t_double2_ ) //0.15 ~ 1.05초 , 30 ~ 210 tick
       {
         temp_px(i) = supportfoot_support_init_(0);
         temp_py(i) = supportfoot_support_init_(1);
       }
-      else if(i >= t_total_ - t_rest_last_ - t_double2_  && i < t_total_) //1.05 ~ 1.15초 , 210 ~ 230 tick 
+      else if(i >= t_total_ - t_rest_last_ - t_double2_  && i < t_total_ ) //1.05 ~ 1.15초 , 210 ~ 230 tick 
       {
-        temp_px(i) = B - Kx + Kx / (t_rest_last_ + t_double2_) * (i+1 - (t_total_ - t_rest_last_ - t_double2_));
-        temp_py(i) = Ky + (supportfoot_support_init_(1) + foot_step_support_frame_(current_step_number, 1))/2 + Ky/(t_rest_last_ + t_double2_)*-(i+1 - (t_total_ - t_rest_last_ - t_double2_));
-      }
-    }    
+        temp_px(i) = supportfoot_support_init_(0) + Kx2 / (t_rest_last_ + t_double2_) * (i+1 - (t_total_ - t_rest_last_ - t_double2_));
+        temp_py(i) = supportfoot_support_init_(1) + Ky2 / (t_rest_last_ + t_double2_) * (i+1 - (t_total_ - t_rest_last_ - t_double2_));
+      } 
+    }  
   }
   else if(current_step_number == 1)
-  { 
-    wn = sqrt(GRAVITY / com_support_init_(2));
-    A = (foot_step_support_frame_(current_step_number-1, 1) - supportfoot_support_init_(1))/2 ;
-    B = foot_step_support_frame_(current_step_number-1, 0) - (supportfoot_support_init_(0) + foot_step_support_frame_(current_step_number-1, 0))/2;
-    Kx = (B * 0.15 * wn) / ((0.15*wn) + tanh(wn*(0.45)));
-    Ky = (A * 0.15 * wn * tanh(wn*0.45))/(1 + 0.15 * wn * tanh(wn*0.45)); 
-    
+  {
+    Kx = foot_step_support_frame_(current_step_number-1, 0) - (foot_step_support_frame_(current_step_number-1, 0) + supportfoot_support_init_(0))/2;
+    Ky = foot_step_support_frame_(current_step_number-1, 1) - (foot_step_support_frame_(current_step_number-1, 1) + supportfoot_support_init_(1))/2;
+    Kx2 = (foot_step_support_frame_(current_step_number, 0) + foot_step_support_frame_(current_step_number-1, 0))/2 - foot_step_support_frame_(current_step_number-1, 0);
+    Ky2 = (foot_step_support_frame_(current_step_number, 1) + foot_step_support_frame_(current_step_number-1, 1))/2 - foot_step_support_frame_(current_step_number-1, 1);
+
     for(int i = 0; i < t_total_; i++)
     {
-      if(i >= 0 && i < t_rest_init_ + t_double1_) //0 ~ 0.15초 , 10 ~ 30 tick
+      if(i < t_rest_init_ + t_double1_) //0.05 ~ 0.15초 , 10 ~ 30 tick
       {
-        temp_px(i) = (foot_step_support_frame_(current_step_number-1, 0) + supportfoot_support_init_(0))/2 + Kx / (t_rest_init_+ t_double1_) * (i+1);
-        temp_py(i) = (foot_step_support_frame_(current_step_number-1, 1) + supportfoot_support_init_(1))/2 + Ky / (t_rest_init_+ t_double1_) * (i+1);
+        temp_px(i) = (foot_step_support_frame_(current_step_number-1, 0) + supportfoot_support_init_(0))/2 + Kx / (t_rest_init_ + t_double1_) * (i+1);
+        temp_py(i) = (foot_step_support_frame_(current_step_number-1, 1) + supportfoot_support_init_(1))/2 + Ky / (t_rest_init_ + t_double1_) * (i+1);
       }
       else if(i >= t_rest_init_ + t_double1_ && i < t_total_ - t_rest_last_ - t_double2_) //0.15 ~ 1.05초 , 30 ~ 210 tick
       {
         temp_px(i) = foot_step_support_frame_(current_step_number-1, 0);
         temp_py(i) = foot_step_support_frame_(current_step_number-1, 1);
       }
-      else if(i >= t_total_ - t_rest_last_ - t_double2_ && i < t_total_) //1.05 ~ 1.2초 , 210 ~ 240 tick 
-      {               
-        temp_px(i) = (foot_step_support_frame_(current_step_number-1, 0) + foot_step_support_frame_(current_step_number, 0))/2 - Kx + Kx /(t_rest_last_ + t_double2_) * (i+1 - (t_total_ - t_rest_last_ - t_double2_));
-        temp_py(i) = Ky + (foot_step_support_frame_(current_step_number-1, 1) + foot_step_support_frame_(current_step_number, 1))/2 + Ky/(t_rest_last_ + t_double2_)*-(i+1 - (t_total_ - t_rest_last_ - t_double2_));
+      else if(i >= t_total_ - t_rest_last_ - t_double2_ && i < t_total_ ) //1.05 ~ 1.2초 , 210 ~ 240 tick 
+      {
+        temp_px(i) = foot_step_support_frame_(current_step_number-1, 0) + Kx2/(t_double2_ + t_rest_last_)*(i+1 - (t_total_ - t_rest_last_ - t_double2_));
+        temp_py(i) = foot_step_support_frame_(current_step_number-1, 1) + Ky2/(t_double2_ + t_rest_last_)*(i+1 - (t_total_ - t_rest_last_ - t_double2_));
       }
     }
   }
   else
-  { 
-    wn = sqrt(GRAVITY / com_support_init_(2));
-    A = (foot_step_support_frame_(current_step_number-1, 1) - foot_step_support_frame_(current_step_number-2, 1))/2 ;
-    B = foot_step_support_frame_(current_step_number-1, 0) - (foot_step_support_frame_(current_step_number-2, 0) + foot_step_support_frame_(current_step_number-1, 0))/2;
-    Kx = (B * 0.15 * wn) / ((0.15*wn) + tanh(wn*(0.45))) ;
-    Ky = (A * 0.15 * wn * tanh(wn*0.45))/(1 + 0.15 * wn * tanh(wn*0.45)); 
+  {
+    Kx = foot_step_support_frame_(current_step_number-1, 0) - ((foot_step_support_frame_(current_step_number-2, 0) + foot_step_support_frame_(current_step_number-1, 0))/2);
+    Ky = foot_step_support_frame_(current_step_number-1, 1) - ((foot_step_support_frame_(current_step_number-2, 1) + foot_step_support_frame_(current_step_number-1, 1))/2);
+    Kx2 = (foot_step_support_frame_(current_step_number, 0) + foot_step_support_frame_(current_step_number-1, 0))/2 - foot_step_support_frame_(current_step_number-1, 0);
+    Ky2 = (foot_step_support_frame_(current_step_number, 1) + foot_step_support_frame_(current_step_number-1, 1))/2 - foot_step_support_frame_(current_step_number-1, 1);
+
     for(int i = 0; i < t_total_; i++)
-    {      
-      if(i >= 0 && i < t_rest_init_ + t_double1_) //0 ~ 0.15초 , 0 ~ 30 tick
-      { 
-        temp_px(i) = (foot_step_support_frame_(current_step_number-2, 0) + foot_step_support_frame_(current_step_number-1, 0))/2 + Kx/(t_rest_init_ + t_double1_)*(i+1);
-        temp_py(i) = (foot_step_support_frame_(current_step_number-2, 1) + foot_step_support_frame_(current_step_number-1, 1))/2 + Ky/(t_rest_init_ + t_double1_)*(i+1);
-      }
-      else if(i >= (t_rest_init_ + t_double1_) && i < (t_total_ - t_rest_last_ - t_double2_)) //0.15 ~ 1.05초 , 30 ~ 210 tick
+    {
+      if(i < t_rest_init_ + t_double1_) //0 ~ 0.15초 , 0 ~ 30 tick
       {
-        temp_px(i) = foot_step_support_frame_(current_step_number-1, 0) ;
-        temp_py(i) = foot_step_support_frame_(current_step_number-1, 1) ;
+        temp_px(i) = (foot_step_support_frame_(current_step_number-2, 0) + foot_step_support_frame_(current_step_number-1, 0))/2 + Kx/(t_rest_init_+t_double1_)*(i+1);
+        temp_py(i) = (foot_step_support_frame_(current_step_number-2, 1) + foot_step_support_frame_(current_step_number-1, 1))/2 + Ky/(t_rest_init_+t_double1_)*(i+1);
       }
-      else if( i >= (t_total_ - t_rest_last_ - t_double2_) && (i < t_total_) && (current_step_num_ == total_step_num_ - 1))
+      else if(i >= t_rest_init_ + t_double1_ && i < t_total_ - t_rest_last_ - t_double2_) //0.15 ~ 1.05초 , 30 ~ 210 tick
       {
-        temp_px(i) = (foot_step_support_frame_(current_step_number, 0) + foot_step_support_frame_(current_step_number-1, 0))/2;
-        temp_py(i) = Ky + (foot_step_support_frame_(current_step_number-1, 1) + foot_step_support_frame_(current_step_number, 1))/2 + Ky/(t_rest_last_ + t_double2_)*-(i+1 - (t_total_ - t_rest_last_ - t_double2_));
-      }       
-      else if(i >= (t_total_ - t_rest_last_ - t_double2_) && i < t_total_) //1.05 ~ 1.2초 , 210 ~ 240 tick 
-      { 
-        temp_px(i) = (foot_step_support_frame_(current_step_number, 0) + foot_step_support_frame_(current_step_number-1, 0))/2 -Kx + Kx/(t_rest_last_ + t_double2_)*(i+1 - (t_total_ - t_rest_last_ - t_double2_));
-        temp_py(i) = Ky + (foot_step_support_frame_(current_step_number-1, 1) + foot_step_support_frame_(current_step_number, 1))/2 + Ky/(t_rest_last_ + t_double2_)*-(i+1 - (t_total_ - t_rest_last_ - t_double2_));
+        temp_px(i) = foot_step_support_frame_(current_step_number-1, 0);
+        temp_py(i) = foot_step_support_frame_(current_step_number-1, 1);
       }
-    } 
-  }  
+      else if(i >= t_total_ - t_rest_last_ - t_double2_ && i < t_total_ ) //1.05 ~ 1.2초 , 210 ~ 240 tick 
+      {
+        temp_px(i) = foot_step_support_frame_(current_step_number-1, 0) + Kx2/(t_double2_ + t_rest_last_)*(i+1 - (t_total_ - t_rest_last_ - t_double2_));
+        temp_py(i) = foot_step_support_frame_(current_step_number-1, 1) + Ky2/(t_double2_ + t_rest_last_)*(i+1 - (t_total_ - t_rest_last_ - t_double2_));
+      }      
+    }
+  } 
 }
 
 void WalkingController::preview_Parameter_CPM(double dt, int NL, Eigen::Matrix3d& K, Eigen::Vector3d com_support_init_, Eigen::MatrixXd& Gi, Eigen::VectorXd& Gd, Eigen::MatrixXd& Gx, 
   Eigen::MatrixXd& A, Eigen::VectorXd& B, Eigen::MatrixXd& C, Eigen::MatrixXd& D, Eigen::MatrixXd& A_bar, Eigen::VectorXd& B_bar)
   {      
-    double Kp = 100;
-    double Kv = 10;
+    double Kp = 1000;
+    double Kv = 100;
     
     A.resize(2,2);
     A(0,0) = 1.0 - Kp*dt*dt*0.5;
@@ -904,12 +1294,12 @@ void WalkingController::preview_Parameter_CPM(double dt, int NL, Eigen::Matrix3d
     Q_bar.setZero();
     Q_bar(0,0) = Qe(0,0);
         
-    K(0,0) = 110.075528194525;
-    K(0,1) = 6002.773189475650;
-    K(0,2) = 1620.941388698153;
-    K(1,1) = 330547.378525671258;
-    K(1,2) = 89255.846463209440;
-    K(2,2) = 24102.882783488018;
+    K(0,0) = 109.947260446928;
+    K(0,1) = 5988.726409090153;
+    K(0,2) = 1616.147805395792;
+    K(1,1) = 329205.774693762709;
+    K(1,2) = 88838.095561857510;
+    K(2,2) = 23974.305139978365;
     K(1, 0) = K(0, 1);
     K(2, 0) = K(0, 2);
     K(2, 1) = K(1, 2);
@@ -971,8 +1361,18 @@ void WalkingController::previewcontroller_CPM(double dt, int NL, int tick, doubl
   for(int i = 0; i < zmp_size; i++)
   {
     px_ref(i) = ref_zmp_(i,0);
+    //CP_X_ref = 0;
     py_ref(i) = ref_zmp_(i,1);
-  }
+     // Static balancing 
+    /*if((int)current_step_num_ % 2 == 0)
+    {
+      py_ref(i) = -0.129425000000000;       
+    }
+    else if((int)current_step_num_ % 2 == 1)
+    {
+      py_ref(i) = 0.129425000000000; 
+    }*/
+  }  
   
   Eigen::Matrix1x3d C;
   C(0,0) = 1; C(0,1) = 0; C(0,2) = -zc_/GRAVITY;
@@ -1008,8 +1408,11 @@ void WalkingController::previewcontroller_CPM(double dt, int NL, int tick, doubl
   px = C*Temp_mat_X;
   py = C*Temp_mat_Y; 
    
-  X_bar_p(0) = px(0) - px_ref(tick); 
-  Y_bar_p(0) = py(0) - py_ref(tick);
+  if(walking_tick_ == 0)
+  { del_zmp_x = 0; del_zmp_y = 0; }
+
+  X_bar_p(0) = px(0) - (px_ref(tick) + del_zmp_x); 
+  Y_bar_p(0) = py(0) - (py_ref(tick) + del_zmp_y);
    
   double sum_Gd_px_ref = 0, sum_Gd_py_ref = 0;
 
@@ -1040,13 +1443,29 @@ void WalkingController::previewcontroller_CPM(double dt, int NL, int tick, doubl
   
   X_bar_p = A_bar*X_bar_p + B_bar*del_ux;
   Y_bar_p = A_bar*Y_bar_p + B_bar*del_uy;  
-
+    
   UX = UX + del_ux(0,0);
-  UY = UY + del_uy(0,0);    
-  
+  UY = UY + del_uy(0,0);  
+
   XD = A*Preview_X + B*UX;
   YD = A*Preview_Y + B*UY;
-         
+
+  /////////////////////////////////// CP feedback 
+  
+  if(walking_tick_ == 0)
+  { del_ux_LPF = 0; del_uy_LPF = 0; }
+  
+  del_ux_LPF = (2*M_PI*6.0*del_t)/(1+2*M_PI*6.0*del_t)*del_ux(0,0) + 1/(1+2*M_PI*6.0*del_t)*del_ux_LPF;
+  del_uy_LPF = (2*M_PI*6.0*del_t)/(1+2*M_PI*6.0*del_t)*del_uy(0,0) + 1/(1+2*M_PI*6.0*del_t)*del_uy_LPF;
+
+  CP_X_ref = UX + (del_ux_LPF*hz_)/3.8;
+  CP_Y_ref = UY + (del_uy_LPF*hz_)/3.8; 
+
+  CP_X_act = com_support_current_Euler(0) + com_support_current_dot_LPF(0)/3.8;
+  CP_Y_act = com_support_current_Euler(1) + com_support_current_dot_LPF(1)/3.8;
+
+  del_zmp_x = 1.5*(CP_X_act - CP_X_ref);
+  del_zmp_y = 2.0*(CP_Y_act - CP_Y_ref); 
 }
 
 void WalkingController::getComTrajectory()
@@ -1067,7 +1486,7 @@ void WalkingController::getComTrajectory()
           
   previewcontroller_CPM(1.0/hz_, 16*hz_/10, walking_tick_-zmp_start_time_, xi_, yi_, xs_, ys_, UX_, UY_, Gi_, Gd_, Gx_, A_, B_, A_bar_, B_bar_, XD_, YD_, X_bar_p_, Y_bar_p_);
   
-  xs_(0) = com_support_current_(0); ys_(0) = com_support_current_(1); 
+  xs_(0) = com_support_current_(0); ys_(0) = com_support_current_(1);  // Euler 써도 3도 경사 가능
   xs_(1) = XD_(1); ys_(1) = YD_(1); 
 
   com_desired_(0) = UX_;
@@ -1126,9 +1545,9 @@ void WalkingController::getComTrajectory()
 void WalkingController::getPelvTrajectory()
 {
   double z_rot = foot_step_support_frame_(current_step_num_,5);
-   
-  pelv_trajectory_support_.translation()(0) = pelv_support_current_.translation()(0) + 2.0*(com_desired_(0) - com_support_current_(0));
-  pelv_trajectory_support_.translation()(1) = pelv_support_current_.translation()(1) + 2.0*(com_desired_(1) - com_support_current_(1));
+  
+  pelv_trajectory_support_.translation()(0) = pelv_support_current_Euler.translation()(0) + 1.0*(com_desired_(0) - com_support_current_Euler(0));
+  pelv_trajectory_support_.translation()(1) = pelv_support_current_Euler.translation()(1) + 1.0*(com_desired_(1) - com_support_current_Euler(1));
   pelv_trajectory_support_.translation()(2) = com_desired_(2);          
        
   Eigen::Vector3d Trunk_trajectory_euler;
@@ -1140,7 +1559,9 @@ void WalkingController::getPelvTrajectory()
   { Trunk_trajectory_euler(2) = DyrosMath::cubic(walking_tick_,t_start_real_+t_double1_,t_start_+t_total_-t_double2_-t_rest_last_, pelv_support_euler_init_(2),z_rot/2.0,0.0,0.0); }
   else
   { Trunk_trajectory_euler(2) = z_rot/2.0; } 
-  
+
+  Trunk_trajectory_euler(1) = -(1*(P_angle) + 1.5*P_angle_i); 
+   cout << P_angle*180/3.141592 << "," << com_support_current_(0) << "," << com_support_current_Euler(0) << endl;
   pelv_trajectory_support_.linear() = DyrosMath::rotateWithZ(Trunk_trajectory_euler(2))*DyrosMath::rotateWithY(Trunk_trajectory_euler(1))*DyrosMath::rotateWithX(Trunk_trajectory_euler(0));
 }
 
@@ -1327,7 +1748,12 @@ void WalkingController::computeIkControl_MJ(Eigen::Isometry3d float_trunk_transf
   q_des(9) = -q_des(9) + 14.8197729791*DEG2RAD;
   q_des(10) = -q_des(10) + 9.2602215311*DEG2RAD; 
   q_des(11) =  atan2( R_r(1), R_r(2) );
-  
+
+  //q_des(4) = q_des(4) + (0.2*(P_angle) + 0.4*P_angle_i) ;
+  //q_des(10) = q_des(10) - (0.2*(P_angle) + 0.4*P_angle_i) ;
+ 
+  //cout << P_angle*180/3.141592 << "," << q_des(4)*180/3.141592 << endl;  
+  MJ_graph << P_angle << "," << UX_ << "," << com_support_current_Euler(0) << "," << com_support_current_(0) <<  endl;
 }
 
 void WalkingController::updateNextStepTime()
@@ -1367,53 +1793,44 @@ void WalkingController::slowCalc()
 
 void WalkingController::hip_compensator()
 {
-  double left_hip_angle = 2.0*DEG2RAD, right_hip_angle = 2.0*DEG2RAD, left_hip_angle_first_step = 2.0*DEG2RAD, right_hip_angle_first_step = 2.0*DEG2RAD,
-      left_hip_angle_temp = 0.0, right_hip_angle_temp = 0.0, temp_time = 0.1*hz_;
+  double left_hip_roll = 2.0*DEG2RAD, right_hip_roll = 2.0*DEG2RAD, left_hip_pitch = 0.8*DEG2RAD, right_hip_pitch = 0.8*DEG2RAD,
+      left_hip_roll_temp = 0.0, right_hip_roll_temp = 0.0, left_hip_pitch_temp = 0.0, right_hip_pitch_temp = 0.0, temp_time = 0.1*hz_;
 
-  if(current_step_num_ == 0)
+  if(foot_step_(current_step_num_, 6) == 1) //left support foot
   {
-    if(foot_step_(current_step_num_, 6) == 1) //left support foot
+    if(walking_tick_ < t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time)
     {
-      if(walking_tick_ < t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time)
-        left_hip_angle_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_rest_init_ + t_double1_, t_start_ + t_rest_init_ + t_double1_ + temp_time, 0, left_hip_angle_first_step, 0.0, 0.0);
-      else if(walking_tick_ >= t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time)
-        left_hip_angle_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time, t_start_ + t_total_ - t_rest_last_,left_hip_angle_first_step, 0.0, 0.0, 0.0);
-      else
-        left_hip_angle_temp = 0;
-    }
-    else if(foot_step_(current_step_num_, 6) == 0) // right support foot
+      left_hip_roll_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_rest_init_ + t_double1_, t_start_ + t_rest_init_ + t_double1_ + temp_time, 0, left_hip_roll, 0.0, 0.0);
+      left_hip_pitch_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_rest_init_ + t_double1_, t_start_ + t_rest_init_ + t_double1_ + temp_time, 0, left_hip_pitch, 0.0, 0.0);
+    }      
+    else if(walking_tick_ >= t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time)
     {
-      if(walking_tick_ < t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time)
-        right_hip_angle_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_rest_init_ + t_double1_, t_start_ + t_rest_init_ + t_double1_ + temp_time, 0, right_hip_angle_first_step, 0.0, 0.0);
-      else if(walking_tick_ >= t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time)
-        right_hip_angle_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time, t_start_ + t_total_ - t_rest_last_,right_hip_angle_first_step, 0.0, 0.0, 0.0);
-      else
-        right_hip_angle_temp = 0;
-    }
+      left_hip_roll_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time, t_start_ + t_total_ - t_rest_last_,left_hip_roll, 0.0, 0.0, 0.0);
+      left_hip_pitch_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time, t_start_ + t_total_ - t_rest_last_,left_hip_pitch, 0.0, 0.0, 0.0);
+    }      
+    else
+    { left_hip_roll_temp = 0; left_hip_pitch_temp = 0; }      
   }
-  else
+  else if(foot_step_(current_step_num_, 6) == 0) // right support foot
   {
-    if(foot_step_(current_step_num_, 6) == 1) //left support foot
+    if(walking_tick_ < t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time)
     {
-      if(walking_tick_ < t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time)
-        left_hip_angle_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_rest_init_ + t_double1_, t_start_ + t_rest_init_ + t_double1_ + temp_time, 0, left_hip_angle, 0.0, 0.0);
-      else if(walking_tick_ >= t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time)
-        left_hip_angle_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time, t_start_ + t_total_ - t_rest_last_,left_hip_angle, 0.0, 0.0, 0.0);
-      else
-        left_hip_angle_temp = 0;
-    }
-    else if(foot_step_(current_step_num_, 6) == 0) // right support foot
+      right_hip_roll_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_rest_init_ + t_double1_, t_start_ + t_rest_init_ + t_double1_ + temp_time, 0, right_hip_roll, 0.0, 0.0);
+      right_hip_pitch_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_rest_init_ + t_double1_, t_start_ + t_rest_init_ + t_double1_ + temp_time, 0, right_hip_pitch, 0.0, 0.0);
+    }      
+    else if(walking_tick_ >= t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time)
     {
-      if(walking_tick_ < t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time)
-        right_hip_angle_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_rest_init_ + t_double1_, t_start_ + t_rest_init_ + t_double1_ + temp_time, 0, right_hip_angle, 0.0, 0.0);
-      else if(walking_tick_ >= t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time)
-        right_hip_angle_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time, t_start_ + t_total_ - t_rest_last_,right_hip_angle, 0.0, 0.0, 0.0);
-      else
-        right_hip_angle_temp = 0;
-    }
+      right_hip_roll_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time, t_start_ + t_total_ - t_rest_last_,right_hip_roll, 0.0, 0.0, 0.0);
+      right_hip_pitch_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_total_ - t_rest_last_ - t_double2_ - temp_time, t_start_ + t_total_ - t_rest_last_,right_hip_pitch, 0.0, 0.0, 0.0);
+    }        
+    else
+    { right_hip_roll_temp = 0; right_hip_pitch_temp = 0; }
   }
-  desired_q_(1) = desired_q_(1) + left_hip_angle_temp;
-  desired_q_(7) = desired_q_(7) - right_hip_angle_temp;
+  
+  desired_q_(1) = desired_q_(1) + left_hip_roll_temp;
+  desired_q_(7) = desired_q_(7) - right_hip_roll_temp;
+  desired_q_(2) = desired_q_(2) - left_hip_pitch_temp;
+  desired_q_(8) = desired_q_(8) + right_hip_pitch_temp;
 }
 
 void WalkingController::Compliant_control(Eigen::Vector12d desired_leg_q)
@@ -1443,7 +1860,7 @@ void WalkingController::Compliant_control(Eigen::Vector12d desired_leg_q)
 
   // Mingon's LQR contorller gain (using external encoder)
   double default_gain = 0.2; // Kp가 정확하다면 시뮬레이션이나 실제 로봇이나 0.2~1의 의미는 같다.
-  double compliant_gain = 1.5;
+  double compliant_gain = 1.3;
   double compliant_tick = 0.1*hz_;
   double gain_temp;
   for (int i = 0; i < 12; i ++)
@@ -1455,18 +1872,26 @@ void WalkingController::Compliant_control(Eigen::Vector12d desired_leg_q)
       {
         if (foot_step_(current_step_num_,6) == 0) // 오른발 지지 상태
         { 
-          if(walking_tick_ < t_start_ + t_total_ - t_rest_last_ - t_double2_ - compliant_tick) // gain_temp -> 0.2
+          if(walking_tick_ < t_start_ + t_double1_ + t_rest_init_) // gain_temp -> 0.2
           { // t_total_: 240tick, t_rest_init_,last: 10tick (0.05초), t_double1,2_: 20tick (0.1초), compliant_tick : 20tick (0.1초)
-            gain_temp = default_gain; // 1step 240tick 동안 0~190 tick까지 계속 기본 gain.
+            gain_temp = compliant_gain; // 1step 240tick 동안 0~190 tick까지 계속 기본 gain.
           }
-          else if(walking_tick_ >= t_start_ + t_total_ - t_rest_last_ - t_double2_ - compliant_tick && walking_tick_ < t_start_ + t_total_ - t_rest_last_ - t_double2_)
+          else if(walking_tick_ >= t_start_ + t_rest_init_ + t_double1_ && walking_tick_ < t_start_ + t_rest_init_ + t_double1_ + compliant_tick) // gain_temp -> 0.2
+          { // t_total_: 240tick, t_rest_init_,last: 10tick (0.05초), t_double1,2_: 20tick (0.1초), compliant_tick : 20tick (0.1초)
+            gain_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_rest_init_ + t_double1_ , t_start_ + t_rest_init_ + t_double1_ + compliant_tick , compliant_gain, default_gain, 0.0, 0.0);
+          }
+          else if(walking_tick_ >= t_start_ + t_rest_init_ + t_double1_ + compliant_tick && walking_tick_ < t_start_ + t_total_ - t_rest_last_ - t_double2_ - compliant_tick )
           { 
-            gain_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_total_ - t_rest_last_ - t_double2_ - compliant_tick, t_start_ + t_total_ - t_rest_last_ - t_double2_, default_gain, compliant_gain, 0.0, 0.0);
+            gain_temp = default_gain;
           } // 1step 240tick 동안 190~210 tick까지 기본 gain 0.2에서 1까지 올림.
+          else if(walking_tick_ >= t_start_ + t_total_ - t_rest_last_ - t_double2_ - compliant_tick && walking_tick_ < t_start_ + t_total_ - t_rest_last_ - t_double2_)
+          {
+            gain_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_total_ - t_rest_last_ - t_double2_ - compliant_tick, t_start_ + t_total_ - t_rest_last_ - t_double2_, default_gain, compliant_gain, 0.0, 0.0);
+          } // 1step 240tick 동안 210~240 tick까지 기본 gain 1에서 0.2까지 낮춤.
           else
           {
-            gain_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_total_ - t_rest_last_, t_start_ + t_total_, compliant_gain, default_gain, 0.0, 0.0);
-          } // 1step 240tick 동안 210~240 tick까지 기본 gain 1에서 0.2까지 낮춤.
+            gain_temp = compliant_gain;
+          }          
         } 
         else // 왼발 지지 상태
         {
@@ -1484,20 +1909,28 @@ void WalkingController::Compliant_control(Eigen::Vector12d desired_leg_q)
       {
         if (foot_step_(current_step_num_,6) == 1) // 왼발 지지 상태
         {
-          if(walking_tick_ < t_start_ + t_total_ - t_rest_last_ - t_double2_ - compliant_tick) // gain_temp -> 0.2
-          {
-            gain_temp = default_gain;
+          if(walking_tick_ < t_start_ + t_double1_ + t_rest_init_) // gain_temp -> 0.2
+          { // t_total_: 240tick, t_rest_init_,last: 10tick (0.05초), t_double1,2_: 20tick (0.1초), compliant_tick : 20tick (0.1초)
+            gain_temp = compliant_gain; // 1step 240tick 동안 0~190 tick까지 계속 기본 gain.
           }
+          else if(walking_tick_ >= t_start_ + t_rest_init_ + t_double1_ && walking_tick_ < t_start_ + t_rest_init_ + t_double1_ + compliant_tick) // gain_temp -> 0.2
+          { // t_total_: 240tick, t_rest_init_,last: 10tick (0.05초), t_double1,2_: 20tick (0.1초), compliant_tick : 20tick (0.1초)
+            gain_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_rest_init_ + t_double1_ , t_start_ + t_rest_init_ + t_double1_ + compliant_tick , compliant_gain, default_gain, 0.0, 0.0);
+          }
+          else if(walking_tick_ >= t_start_ + t_rest_init_ + t_double1_ + compliant_tick && walking_tick_ < t_start_ + t_total_ - t_rest_last_ - t_double2_ - compliant_tick )
+          { 
+            gain_temp = default_gain;
+          } // 1step 240tick 동안 190~210 tick까지 기본 gain 0.2에서 1까지 올림.
           else if(walking_tick_ >= t_start_ + t_total_ - t_rest_last_ - t_double2_ - compliant_tick && walking_tick_ < t_start_ + t_total_ - t_rest_last_ - t_double2_)
           {
             gain_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_total_ - t_rest_last_ - t_double2_ - compliant_tick, t_start_ + t_total_ - t_rest_last_ - t_double2_, default_gain, compliant_gain, 0.0, 0.0);
-          }
+          } // 1step 240tick 동안 210~240 tick까지 기본 gain 1에서 0.2까지 낮춤.
           else
           {
-            gain_temp = DyrosMath::cubic(walking_tick_, t_start_ + t_total_ - t_rest_last_, t_start_ + t_total_, compliant_gain, default_gain, 0.0, 0.0);
-          }
-        }
-        else // 오른발 지지 상태
+            gain_temp = compliant_gain;
+          }          
+        } 
+        else // 왼발 지지 상태
         {
           gain_temp = default_gain;
         }
